@@ -54,18 +54,6 @@ app.kubernetes.io/instance: {{ $.Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
-This template now uses $ to be safe and can be called from any context.
-*/}}
-{{- define "netbird.serviceAccountName" -}}
-{{- if $.Values.serviceAccount.create }}
-{{- default (include "netbird.fullname" $) $.Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" $.Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
-{{/*
 Signal component selector labels
 */}}
 {{- define "netbird.signal.selectorLabels" -}}
