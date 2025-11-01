@@ -48,8 +48,8 @@ spec:
         {{- end }}
         {{- if .Values.dashboard.letsencryptPersistence.enabled }}
         - name: netbird-letsencrypt
-          persistentVolumeClaim:
-            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+          configMap:
+            name: {{ include "netbird.fullname" . }}-letsencrypt-config
         {{- end }}
         # TODO: map netbird letsencrypt volume only if required
 ---

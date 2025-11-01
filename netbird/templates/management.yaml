@@ -49,7 +49,7 @@ spec:
             ]
           envFrom:
             - secretRef:
-                name: {{ .Values.existingSecretName }}
+                name: {{ include "netbird.secretName" . }}
           ports:
             - containerPort: {{ .Values.management.config.port | int }}
             - containerPort: 33073 # gRPC
@@ -78,8 +78,8 @@ spec:
         {{- end }}
         {{- if .Values.dashboard.letsencryptPersistence.enabled }}
         - name: netbird-letsencrypt
-          persistentVolumeClaim:
-            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+          configMap:
+            name: {{ include "netbird.fullname" . }}-letsencrypt-config
         {{- end }}
 ---
 apiVersion: v1

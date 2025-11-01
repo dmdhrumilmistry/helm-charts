@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  netbird:
+  - apiVersion: v2
+    appVersion: v0.0.1-beta
+    created: "2025-11-01T18:12:07.695245393Z"
+    description: A Helm chart for deploying a self-hosted Netbird stack.
+    digest: 43ef42b764675dd0ef79fa995bc26571d86162c0022a2b715661622ee3b1c72f
+    icon: https://avatars.githubusercontent.com/u/100464677
+    name: netbird
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/netbird/netbird-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-11-01T18:12:07.692068219Z"

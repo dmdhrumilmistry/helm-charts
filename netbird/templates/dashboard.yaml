@@ -26,7 +26,7 @@ spec:
             - containerPort: 443
           envFrom:
             - secretRef:
-                name: {{ .Values.existingSecretName }}
+                name: {{ include "netbird.secretName" . }}
           env:
             - name: NETBIRD_MGMT_API_ENDPOINT
               value: "https://{{ .Values.global.domain }}:{{ .Values.management.service.port }}"

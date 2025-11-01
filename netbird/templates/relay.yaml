@@ -23,7 +23,7 @@ spec:
           imagePullPolicy: {{ .Values.relay.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ .Values.existingSecretName }}
+                name: {{ include "netbird.secretName" . }}
           env:
             - name: NB_LOG_LEVEL
               value: {{ .Values.relay.config.logLevel | quote }}

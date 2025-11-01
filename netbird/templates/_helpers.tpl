@@ -106,3 +106,45 @@ app.kubernetes.io/name: {{ include "netbird.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: "postgres"
 {{- end }}
+
+{{/*
+PostgreSQL hostname - automatically constructed from service name
+*/}}
+{{- define "netbird.postgres.hostname" -}}
+{{- if .Values.postgres.enabled -}}
+{{- printf "%s-postgres" (include "netbird.fullname" .) -}}
+{{- else -}}
+{{- .Values.postgres.externalHost | default "localhost" -}}
+{{- end -}}
+{{- end }}
+
+
+{{/*
+PostgreSQL connection URL - using actual values from secrets
+*/}}
+{{- define "netbird.postgres.url" -}}
+{{- $host := include "netbird.postgres.hostname" . -}}
+{{- $port := .Values.postgres.service.port | default 5432 -}}
+{{- $dbname := .Values.postgres.database | default "netbird" -}}
+{{- $username := .Values.secrets.POSTGRES_USER | default (.Values.postgres.auth.username | default "netbird") -}}
+{{- $password := .Values.secrets.POSTGRES_PASSWORD | default (.Values.postgres.auth.password | default "defaultpass") -}}
+{{- printf "postgres://%s:%s@%s:%v/%s?sslmode=disable" $username $password $host $port $dbname -}}
+{{- end }}
+
+{{/*
+Secret name for all components
+*/}}
+{{- define "netbird.secretName" -}}
+{{ include "netbird.fullname" . }}-secrets
+{{- end }}
+
+{{/*
+Component selector labels
+This template expects the component name as . and uses $ for root context
+Usage: include "netbird.component.selectorLabels" "signal"
+*/}}
+{{- define "netbird.component.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "netbird.name" $ }}
+app.kubernetes.io/instance: {{ $.Release.Name }}
+app.kubernetes.io/component: {{ . | quote }}
+{{- end }}

@@ -60,3 +60,10 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# test values
+*-test-values.yaml
+*-test-values.yml
+
+# secret values
+netbird-secret.yaml

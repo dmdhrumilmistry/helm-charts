@@ -1,3 +1,4 @@
+{{/*
 {{- if .Values.postgres.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -25,7 +26,7 @@ spec:
             - containerPort: 5432
           envFrom:
             - secretRef:
-                name: {{ .Values.existingSecretName }}
+                name: {{ include "netbird.secretName" . }}
           {{- if .Values.postgres.persistence.enabled }}
           volumeMounts:
             - mountPath: /var/lib/postgresql
@@ -54,3 +55,5 @@ spec:
   selector:
     {{- include "netbird.postgres.selectorLabels" . | nindent 4 }}
 {{- end }}
+
+*/}}
