@@ -1,0 +1,79 @@
+{{- if .Values.postgres.enabled | and .Values.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "netbird.fullname" . }}-postgres-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  accessModes:
+    {{- .Values.postgres.persistence.accessModes | default .Values.persistence.accessModes | toYaml | nindent 4 }}
+  {{- if .Values.postgres.persistence.storageClassName | default .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.postgres.persistence.storageClassName | default .Values.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size | quote }}
+---
+{{- end }}
+{{- if .Values.management.enabled | and .Values.management.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "netbird.fullname" . }}-mgmt-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: management
+spec:
+  accessModes:
+    {{- .Values.management.persistence.accessModes | default .Values.persistence.accessModes | toYaml | nindent 4 }}
+  {{- if .Values.management.persistence.storageClassName | default .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.management.persistence.storageClassName | default .Values.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.management.persistence.size | quote }}
+---
+{{- end }}
+{{- if .Values.signal.enabled | and .Values.signal.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "netbird.fullname" . }}-signal-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: signal
+spec:
+  accessModes:
+    {{- .Values.signal.persistence.accessModes | default .Values.persistence.accessModes | toYaml | nindent 4 }}
+  {{- if .Values.signal.persistence.storageClassName | default .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.signal.persistence.storageClassName | default .Values.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.signal.persistence.size | quote }}
+---
+{{- end }}
+{{- if .Values.dashboard.enabled | and .Values.dashboard.letsencryptPersistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  accessModes:
+    {{- .Values.dashboard.letsencryptPersistence.accessModes | default .Values.persistence.accessModes | toYaml | nindent 4 }}
+  {{- if .Values.dashboard.letsencryptPersistence.storageClassName | default .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.dashboard.letsencryptPersistence.storageClassName | default .Values.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.dashboard.letsencryptPersistence.size | quote }}
+{{- end }}

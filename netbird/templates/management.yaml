@@ -1,0 +1,118 @@
+{{- if .Values.management.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-management
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: management
+spec:
+  replicas: {{ .Values.management.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "management" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "management" | nindent 8 }}
+    spec:
+      {{- if .Values.configmaps.create | and .Values.management.persistence.enabled }}
+      initContainers:
+        # This copies the ConfigMap config to the PVC to make it writable
+        - name: copy-management-config
+          image: busybox:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              if [ ! -f /mnt/management.json ]; then
+                cp /config/management.json /mnt/management.json;
+              fi
+          volumeMounts:
+            - name: management-config
+              mountPath: /config
+            - name: netbird-mgmt
+              mountPath: /mnt
+      {{- end }}
+      containers:
+        - name: management
+          image: "{{ .Values.management.image.repository }}:{{ .Values.management.image.tag }}"
+          imagePullPolicy: {{ .Values.management.image.pullPolicy }}
+          args:
+            [
+              "--port", {{ .Values.management.config.port | quote }},
+              "--log-file", {{ .Values.management.config.logFile | quote }},
+              "--log-level", {{ .Values.management.config.logLevel | quote }},
+              "--disable-anonymous-metrics={{ .Values.management.config.disableAnonymousMetrics }}",
+              "--single-account-mode-domain={{ .Values.global.domain }}",
+              "--dns-domain={{ .Values.management.config.dnsDomain }}"
+            ]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecretName }}
+          ports:
+            - containerPort: {{ .Values.management.config.port | int }}
+            - containerPort: 33073 # gRPC
+          volumeMounts:
+            {{- if .Values.management.persistence.enabled }}
+            - name: netbird-mgmt
+              mountPath: /var/lib/netbird
+            - name: netbird-mgmt
+              mountPath: /etc/netbird
+            {{- end }}
+            {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+            - name: netbird-letsencrypt
+              mountPath: /etc/letsencrypt/live/{{ .Values.global.domain }}/
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.management.persistence.enabled }}
+        - name: netbird-mgmt
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-mgmt-pvc
+        {{- end }}
+        {{- if .Values.configmaps.create }}
+        - name: management-config
+          configMap:
+            name: {{ include "netbird.fullname" . }}-netbird-config
+        {{- end }}
+        {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+        - name: netbird-letsencrypt
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-management
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: management
+spec:
+  type: {{ .Values.management.service.type }}
+  ports:
+    - port: {{ .Values.management.service.port }}
+      targetPort: {{ .Values.management.service.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "management" | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-management-grpc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: management
+spec:
+  type: {{ .Values.management.grpcService.type }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "management" | nindent 4 }}
+  ports:
+    - name: grpc
+      port: {{ .Values.management.grpcService.port }}
+      targetPort: {{ .Values.management.grpcService.targetPort }}
+      protocol: TCP
+{{- end }}

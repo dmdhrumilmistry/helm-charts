@@ -1,161 +1,227 @@
-# Default values for netbird.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# -----------------------------------------------------------------
+# Global Settings
+# -----------------------------------------------------------------
+global:
+  # The primary domain for your Netbird services.
+  # This is used to configure all components.
+  domain: "selfhosted.netbird.local"
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+# -----------------------------------------------------------------
+# Secret Management
+# -----------------------------------------------------------------
+# The name of the *existing* Kubernetes Secret that contains all
+# necessary keys (POSTGRES_USER, AUTH_CLIENT_ID, NB_AUTH_SECRET, etc.)
+# You must create this secret manually *before* installing the chart.
+existingSecretName: "netbird-secrets"
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
-image:
-  repository: nginx
-  # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
-
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-imagePullSecrets: []
-# This is to override the chart name.
-nameOverride: ""
-fullnameOverride: ""
-
-# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
-serviceAccount:
-  # Specifies whether a service account should be created
+# -----------------------------------------------------------------
+# ConfigMaps
+# -----------------------------------------------------------------
+# Contents for the netbird-config and coturn-config ConfigMaps.
+# You MUST provide the content for turnserver.conf and management.json here.
+configmaps:
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
-  automount: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  
+  # Content for management.json
+  # below is an invalid example; replace with your actual configuration
+  managementJson: |
+    {
+      "turn": {
+        "external": {
+          "user": "netbird-user",
+          "password": "netbird-password"
+        }
+      }
+    }
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+  # Content for turnserver.conf
+  # below is an invalid example; replace with your actual configuration
+  turnserverConf: |
+    # Example turnserver.conf content
+    # Replace with your actual configuration
+    lt-cred-mech
+    user=netbird-user:netbird-password
+    realm=netbird.selfhosted
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# -----------------------------------------------------------------
+# Persistence
+# -----------------------------------------------------------------
+# Global persistence settings. Can be overridden per-component.
+persistence:
+  # Your original file used ReadWriteOnce, common for single-node (k3s)
+  # or block storage. Change to "ReadWriteMany" for multi-node with NFS/Ceph.
+  accessModes: [ "ReadWriteOnce" ]
+  storageClassName: "" # Set to your StorageClass, or "" for default
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+# -----------------------------------------------------------------
+# PostgreSQL Database
+# -----------------------------------------------------------------
+# Deploys a self-contained PostgreSQL instance.
+# Set 'enabled: false' if you use an external database.
+postgres:
+  enabled: true
+  image:
+    repository: "postgres"
+    tag: "18" # Your original manifest used "18", which is not a valid tag. Using "16".
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP # Changed from LoadBalancer, as it's typically internal
+    port: 5432 # TODO: make this port dynamic in postgres.yaml
+  persistence:
+    enabled: true
+    size: 3Gi
+    # accessModes: ... (uses global default)
+    # storageClassName: ... (uses global default)
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
-service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-  type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 80
+# -----------------------------------------------------------------
+# Netbird Dashboard
+# -----------------------------------------------------------------
+dashboard:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "netbirdio/dashboard"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  # Dashboard environment configuration
+  config:
+    authAuthority: "https://accounts.google.com"
+    useAuth0: "false"
+    authSupportedScopes: "openid profile email"
+    authRedirectUri: "/auth"
+    authSilentRedirectUri: "/silent-auth"
+    netbirdTokenSource: "idToken"
+    nginxSslPort: "443"
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
+  service:
+    type: ClusterIP
+    http:
+      port: 80
+      targetPort: 80
+    https:
+      port: 9443 # External port (e.g., for Ingress)
+      targetPort: 443 # Container port
+
+  # Persistence for Let's Encrypt certificates generated by the dashboard
+  letsencryptPersistence:
+    enabled: true
+    size: 1Gi
+    # accessModes: ... (uses global default)
+    # storageClassName: ... (uses global default)
+
+# -----------------------------------------------------------------
+# Netbird Signal
+# -----------------------------------------------------------------
+signal:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "netbirdio/signal"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: LoadBalancer
+    port: 10000
+    targetPort: 10000
+
+  persistence:
+    enabled: true
+    size: 1Gi
+    # accessModes: ... (uses global default)
+    # storageClassName: ... (uses global default)
+
+# -----------------------------------------------------------------
+# Netbird Relay
+# -----------------------------------------------------------------
+relay:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "netbirdio/relay"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  config:
+    logLevel: "info"
+    listenAddress: ":33080"
+    # Port must match listenAddress
+    exposedPort: 33080 
+
+  service:
+    type: LoadBalancer
+    port: 33080
+    targetPort: 33080
+
+# -----------------------------------------------------------------
+# Netbird Management
+# -----------------------------------------------------------------
+management:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "netbirdio/management"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  config:
+    # Command-line args for the management container
+    port: "443"
+    logFile: "console"
+    logLevel: "info"
+    disableAnonymousMetrics: "true"
+    dnsDomain: "netbird.selfhosted"
+
+  service:
+    type: LoadBalancer
+    port: 8443 # External port
+    targetPort: 443 # Container port (matches --port arg)
+  
+  grpcService:
+    type: LoadBalancer
+    port: 33073
+    targetPort: 33073
+  
+  persistence:
+    enabled: true
+    size: 1Gi
+    # accessModes: ... (uses global default)
+    # storageClassName: ... (uses global default)
+
+# -----------------------------------------------------------------
+# Coturn (TURN Server)
+# -----------------------------------------------------------------
+coturn:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "coturn/coturn"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: LoadBalancer
+    port: 3478
+    targetPort: 3478
+
+# -----------------------------------------------------------------
+# Adminer (Database GUI)
+# -----------------------------------------------------------------
+# Disabled by default, was commented out in your original file.
+adminer:
   enabled: false
-  className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  replicas: 1
+  image:
+    repository: "adminer"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  config:
+    defaultServer: "{{ include \"netbird.fullname\" . }}-postgres" # Service name of the DB
+    design: "lucas"
 
-# -- Expose the service via gateway-api HTTPRoute
-# Requires Gateway API resources and suitable controller installed within the cluster
-# (see: https://gateway-api.sigs.k8s.io/guides/)
-httpRoute:
-  # HTTPRoute enabled.
-  enabled: false
-  # HTTPRoute annotations.
-  annotations: {}
-  # Which Gateways this Route is attached to.
-  parentRefs:
-  - name: gateway
-    sectionName: http
-    # namespace: default
-  # Hostnames matching HTTP header.
-  hostnames:
-  - chart-example.local
-  # List of rules and filters applied.
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /headers
-  #   filters:
-  #   - type: RequestHeaderModifier
-  #     requestHeaderModifier:
-  #       set:
-  #       - name: My-Overwrite-Header
-  #         value: this-is-the-only-value
-  #       remove:
-  #       - User-Agent
-  # - matches:
-  #   - path:
-  #       type: PathPrefix
-  #       value: /echo
-  #     headers:
-  #     - name: version
-  #       value: v2
-
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  httpGet:
-    path: /
-    port: http
-readinessProbe:
-  httpGet:
-    path: /
-    port: http
-
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
+  service:
+    type: LoadBalancer
+    port: 8080
+    targetPort: 8080

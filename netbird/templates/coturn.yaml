@@ -1,0 +1,55 @@
+{{- if .Values.coturn.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-coturn
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coturn
+spec:
+  replicas: {{ .Values.coturn.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "coturn" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "coturn" | nindent 8 }}
+    spec:
+      containers:
+        - name: coturn
+          image: "{{ .Values.coturn.image.repository }}:{{ .Values.coturn.image.tag }}"
+          imagePullPolicy: {{ .Values.coturn.image.pullPolicy }}
+          command: [ "turnserver", "-c", "/etc/turnserver.conf"]
+          ports:
+            - containerPort: 3478
+          {{- if .Values.configmaps.create }}
+          volumeMounts:
+            - name: coturn-config
+              mountPath: /etc/turnserver.conf
+              subPath: turnserver.conf
+          {{- end }}
+      {{- if .Values.configmaps.create }}
+      volumes:
+        - name: coturn-config
+          configMap:
+            name: {{ include "netbird.fullname" . }}-coturn-config
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-coturn
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coturn
+spec:
+  type: {{ .Values.coturn.service.type }}
+  ports:
+    - port: {{ .Values.coturn.service.port }}
+      targetPort: {{ .Values.coturn.service.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "coturn" | nindent 4 }}
+{{- end }}

@@ -1,0 +1,52 @@
+{{- if .Values.relay.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-relay
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: relay
+spec:
+  replicas: {{ .Values.relay.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "relay" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "relay" | nindent 8 }}
+    spec:
+      containers:
+        - name: relay
+          image: "{{ .Values.relay.image.repository }}:{{ .Values.relay.image.tag }}"
+          imagePullPolicy: {{ .Values.relay.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecretName }}
+          env:
+            - name: NB_LOG_LEVEL
+              value: {{ .Values.relay.config.logLevel | quote }}
+            - name: NB_LISTEN_ADDRESS
+              value: {{ .Values.relay.config.listenAddress | quote }}
+            - name: NB_EXPOSED_ADDRESS
+              value: "rel://{{ .Values.global.domain }}:{{ .Values.relay.config.exposedPort }}"
+          ports:
+            - containerPort: {{ .Values.relay.config.exposedPort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-relay
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: relay
+spec:
+  type: {{ .Values.relay.service.type }}
+  ports:
+    - port: {{ .Values.relay.service.port }}
+      targetPort: {{ .Values.relay.service.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "relay" | nindent 4 }}
+{{- end }}

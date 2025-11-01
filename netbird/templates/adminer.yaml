@@ -1,0 +1,47 @@
+{{- if .Values.adminer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-adminer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adminer
+spec:
+  replicas: {{ .Values.adminer.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "adminer" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "adminer" | nindent 8 }}
+    spec:
+      containers:
+        - name: adminer
+          image: "{{ .Values.adminer.image.repository }}:{{ .Values.adminer.image.tag }}"
+          imagePullPolicy: {{ .Values.adminer.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ADMINER_DEFAULT_SERVER
+              value: {{ .Values.adminer.config.defaultServer }}
+            - name: ADMINER_DESIGN
+              value: {{ .Values.adminer.config.design | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-adminer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adminer
+spec:
+  type: {{ .Values.adminer.service.type }}
+  ports:
+    - port: {{ .Values.adminer.service.port }}
+      targetPort: {{ .Values.adminer.service.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "adminer" | nindent 4 }}
+{{- end }}

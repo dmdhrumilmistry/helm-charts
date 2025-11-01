@@ -1,0 +1,82 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  replicas: {{ .Values.dashboard.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "dashboard" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "dashboard" | nindent 8 }}
+    spec:
+      containers:
+        - name: dashboard
+          image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecretName }}
+          env:
+            - name: NETBIRD_MGMT_API_ENDPOINT
+              value: "https://{{ .Values.global.domain }}:{{ .Values.management.service.port }}"
+            - name: NETBIRD_MGMT_GRPC_API_ENDPOINT
+              value: "https://{{ .Values.global.domain }}:{{ .Values.management.grpcService.port }}"
+            - name: AUTH_AUTHORITY
+              value: {{ .Values.dashboard.config.authAuthority | quote }}
+            - name: USE_AUTH0
+              value: {{ .Values.dashboard.config.useAuth0 | quote }}
+            - name: AUTH_SUPPORTED_SCOPES
+              value: {{ .Values.dashboard.config.authSupportedScopes | quote }}
+            - name: AUTH_REDIRECT_URI
+              value: {{ .Values.dashboard.config.authRedirectUri | quote }}
+            - name: AUTH_SILENT_REDIRECT_URI
+              value: {{ .Values.dashboard.config.authSilentRedirectUri | quote }}
+            - name: NETBIRD_TOKEN_SOURCE
+              value: {{ .Values.dashboard.config.netbirdTokenSource | quote }}
+            - name: NGINX_SSL_PORT
+              value: {{ .Values.dashboard.config.nginxSslPort | quote }}
+            - name: LETSENCRYPT_DOMAIN
+              value: {{ .Values.global.domain | quote }}
+          {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+          volumeMounts:
+            - name: netbird-letsencrypt
+              mountPath: /etc/letsencrypt
+          {{- end }}
+      {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+      volumes:
+        - name: netbird-letsencrypt
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  type: {{ .Values.dashboard.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.dashboard.service.http.port }}
+      targetPort: {{ .Values.dashboard.service.http.targetPort }}
+    - name: https
+      port: {{ .Values.dashboard.service.https.port }}
+      targetPort: {{ .Values.dashboard.service.https.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "dashboard" | nindent 4 }}
+{{- end }}

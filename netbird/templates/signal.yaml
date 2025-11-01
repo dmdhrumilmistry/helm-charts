@@ -1,0 +1,71 @@
+{{- if .Values.signal.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-signal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: signal
+spec:
+  replicas: {{ .Values.signal.replicas }}
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "signal" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "signal" | nindent 8 }}
+    spec:
+      containers:
+        - name: signal
+          image: "{{ .Values.signal.image.repository }}:{{ .Values.signal.image.tag }}"
+          imagePullPolicy: {{ .Values.signal.image.pullPolicy }}
+          args:
+            [
+              "--cert-file", "/etc/letsencrypt/live/{{ .Values.global.domain }}/fullchain.pem",
+              "--cert-key", "/etc/letsencrypt/live/{{ .Values.global.domain }}/privkey.pem",
+              "--log-file", "console"
+            ]
+          ports:
+            - containerPort: 80
+            - containerPort: 10000
+          volumeMounts:
+            {{- if .Values.signal.persistence.enabled }}
+            - name: netbird-signal
+              mountPath: /var/lib/netbird
+            {{- end }}
+            {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+            - name: netbird-letsencrypt
+              mountPath: /etc/letsencrypt/live/{{ .Values.global.domain }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.signal.persistence.enabled }}
+        - name: netbird-signal
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-signal-pvc
+        {{- end }}
+        {{- if .Values.dashboard.letsencryptPersistence.enabled }}
+        - name: netbird-letsencrypt
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+        {{- end }}
+        # TODO: map netbird letsencrypt volume only if required
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-signal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: signal
+spec:
+  type: {{ .Values.signal.service.type }}
+  ports:
+    - port: {{ .Values.signal.service.port }}
+      targetPort: {{ .Values.signal.service.targetPort }}
+  selector:
+    {{- include "netbird.component.selectorLabels" "signal" | nindent 4 }}
+{{- end }}

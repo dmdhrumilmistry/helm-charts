@@ -11,5 +11,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args: ['{{ include "netbird.fullname" . }}:{{ .Values.service.port }}']
+      args: ['{{ include "netbird.fullname" . }}:{{ .Values.dashboard.service.http.port }}']
   restartPolicy: Never

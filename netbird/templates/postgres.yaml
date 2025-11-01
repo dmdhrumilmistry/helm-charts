@@ -1,0 +1,56 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "netbird.component.selectorLabels" "postgres" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "netbird.component.selectorLabels" "postgres" | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecretName }}
+          {{- if .Values.postgres.persistence.enabled }}
+          volumeMounts:
+            - mountPath: /var/lib/postgresql
+              name: postgresdata
+          {{- end }}
+      {{- if .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: postgresdata
+          persistentVolumeClaim:
+            claimName: {{ include "netbird.fullname" . }}-postgres-pvc
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: {{ .Values.postgres.service.type }}
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: 5432
+  selector:
+    {{- include "netbird.component.selectorLabels" "postgres" | nindent 4 }}
+{{- end }}

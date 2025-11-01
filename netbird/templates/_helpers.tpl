@@ -60,3 +60,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Component selector labels
+Expects to be called with the component name string as context.
+e.g., {{ include "netbird.component.selectorLabels" "signal" }}
+*/}}
+{{- define "netbird.component.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "netbird.name" $ }}
+app.kubernetes.io/instance: {{ $.Release.Name }}
+app.kubernetes.io/component: {{ . | quote }}
+{{- end }}
