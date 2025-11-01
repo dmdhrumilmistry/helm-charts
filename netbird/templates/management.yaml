@@ -11,11 +11,11 @@ spec:
   replicas: {{ .Values.management.replicas }}
   selector:
     matchLabels:
-      {{- include "netbird.component.selectorLabels" "management" | nindent 6 }}
+      {{- include "netbird.management.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.component.selectorLabels" "management" | nindent 8 }}
+        {{- include "netbird.management.selectorLabels" . | nindent 8 }}
     spec:
       {{- if .Values.configmaps.create | and .Values.management.persistence.enabled }}
       initContainers:
@@ -96,7 +96,7 @@ spec:
     - port: {{ .Values.management.service.port }}
       targetPort: {{ .Values.management.service.targetPort }}
   selector:
-    {{- include "netbird.component.selectorLabels" "management" | nindent 4 }}
+    {{- include "netbird.management.selectorLabels" . | nindent 4 }}
 ---
 apiVersion: v1
 kind: Service
@@ -109,7 +109,7 @@ metadata:
 spec:
   type: {{ .Values.management.grpcService.type }}
   selector:
-    {{- include "netbird.component.selectorLabels" "management" | nindent 4 }}
+    {{- include "netbird.management.selectorLabels" . | nindent 4 }}
   ports:
     - name: grpc
       port: {{ .Values.management.grpcService.port }}

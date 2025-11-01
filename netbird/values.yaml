@@ -225,3 +225,45 @@ adminer:
     type: LoadBalancer
     port: 8080
     targetPort: 8080
+
+
+# -----------------------------------------------------------------
+# Ingress
+# -----------------------------------------------------------------
+ingress:
+  enabled: true
+
+  # If you use an Ingress Controller that requires a specific class.
+  # For NGINX: "nginx"
+  # For Traefik: "traefik"
+  className: ""
+
+  # Annotations for your Ingress controller
+  # (e.g., cert-manager, traefik, nginx)
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # For NGINX:
+    # nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+
+  # Hostname for the Ingress.
+  # Defaults to the 'global.domain' value if left empty.
+  host: ""
+
+  # TLS configuration
+  tls:
+    enabled: true
+    # The name of the secret to store the certificate
+    # This secret will be created by cert-manager
+    secretName: "letsencrypt-certs"
+
+  # Path for the Netbird Dashboard
+  dashboard:
+    path: /
+    pathType: ImplementationSpecific # Or Prefix
+
+  ## Feature not implemented in chart yet. Hence, commented out.
+  # Path for the Netbird Management API (uncomment to enable)
+  # This matches the commented-out path in your original file.
+  # management:
+  #   path: /api
+  #   pathType: Prefix

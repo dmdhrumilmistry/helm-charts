@@ -11,11 +11,11 @@ spec:
   replicas: {{ .Values.signal.replicas }}
   selector:
     matchLabels:
-      {{- include "netbird.component.selectorLabels" "signal" | nindent 6 }}
+      {{- include "netbird.signal.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.component.selectorLabels" "signal" | nindent 8 }}
+        {{- include "netbird.signal.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: signal
@@ -67,5 +67,5 @@ spec:
     - port: {{ .Values.signal.service.port }}
       targetPort: {{ .Values.signal.service.targetPort }}
   selector:
-    {{- include "netbird.component.selectorLabels" "signal" | nindent 4 }}
+    {{- include "netbird.signal.selectorLabels" . | nindent 4 }}
 {{- end }}

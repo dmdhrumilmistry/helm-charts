@@ -11,11 +11,11 @@ spec:
   replicas: {{ .Values.dashboard.replicas }}
   selector:
     matchLabels:
-      {{- include "netbird.component.selectorLabels" "dashboard" | nindent 6 }}
+      {{- include "netbird.dashboard.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.component.selectorLabels" "dashboard" | nindent 8 }}
+        {{- include "netbird.dashboard.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: dashboard
@@ -78,5 +78,5 @@ spec:
       port: {{ .Values.dashboard.service.https.port }}
       targetPort: {{ .Values.dashboard.service.https.targetPort }}
   selector:
-    {{- include "netbird.component.selectorLabels" "dashboard" | nindent 4 }}
+    {{- include "netbird.dashboard.selectorLabels" . | nindent 4 }}
 {{- end }}

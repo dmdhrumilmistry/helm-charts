@@ -11,11 +11,11 @@ spec:
   replicas: {{ .Values.coturn.replicas }}
   selector:
     matchLabels:
-      {{- include "netbird.component.selectorLabels" "coturn" | nindent 6 }}
+      {{- include "netbird.coturn.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.component.selectorLabels" "coturn" | nindent 8 }}
+        {{- include "netbird.coturn.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: coturn
@@ -51,5 +51,5 @@ spec:
     - port: {{ .Values.coturn.service.port }}
       targetPort: {{ .Values.coturn.service.targetPort }}
   selector:
-    {{- include "netbird.component.selectorLabels" "coturn" | nindent 4 }}
+    {{- include "netbird.coturn.selectorLabels" . | nindent 4 }}
 {{- end }}

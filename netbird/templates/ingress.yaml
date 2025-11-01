@@ -1,43 +1,45 @@
-{{- if .Values.ingress.enabled -}}
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "netbird.fullname" . }}
+  name: {{ include "netbird.fullname" . }}-ingress
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "netbird.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . }}
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
-  {{- if .Values.ingress.tls }}
+  {{- if .Values.ingress.tls.enabled }}
   tls:
-    {{- range .Values.ingress.tls }}
     - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+        - {{ .Values.ingress.host | default .Values.global.domain | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
+    - host: {{ .Values.ingress.host | default .Values.global.domain | quote }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
-            {{- end }}
+          {{- if .Values.ingress.dashboard.path }}
+          - path: {{ .Values.ingress.dashboard.path }}
+            pathType: {{ .Values.ingress.dashboard.pathType }}
             backend:
               service:
-                name: {{ include "netbird.fullname" $ }}
+                name: {{ include "netbird.fullname" . }}-dashboard
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ .Values.dashboard.service.http.port }}
           {{- end }}
-    {{- end }}
+          {{/*
+          {{- if .Values.ingress.management.path }}
+          - path: {{ .Values.ingress.management.path }}
+            pathType: {{ .Values.ingress.management.pathType }}
+            backend:
+              service:
+                name: {{ include "netbird.fullname" . }}-management
+                port:
+                  number: {{ .Values.management.service.port }}
+          {{- end }}
+          */}}
 {{- end }}

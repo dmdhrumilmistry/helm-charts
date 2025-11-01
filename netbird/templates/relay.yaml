@@ -11,11 +11,11 @@ spec:
   replicas: {{ .Values.relay.replicas }}
   selector:
     matchLabels:
-      {{- include "netbird.component.selectorLabels" "relay" | nindent 6 }}
+      {{- include "netbird.relay.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.component.selectorLabels" "relay" | nindent 8 }}
+        {{- include "netbird.relay.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: relay
@@ -48,5 +48,5 @@ spec:
     - port: {{ .Values.relay.service.port }}
       targetPort: {{ .Values.relay.service.targetPort }}
   selector:
-    {{- include "netbird.component.selectorLabels" "relay" | nindent 4 }}
+    {{- include "netbird.relay.selectorLabels" . | nindent 4 }}
 {{- end }}
