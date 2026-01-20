@@ -24,7 +24,7 @@
 
 ### Helm ###
 # Chart dependencies
-**/charts/*.tgz
+*/charts/*.tgz
 
 ### macOS ###
 # General
