@@ -31,7 +31,6 @@ spec:
                 port:
                   number: {{ .Values.dashboard.service.http.port }}
           {{- end }}
-          {{/*
           {{- if .Values.ingress.management.path }}
           - path: {{ .Values.ingress.management.path }}
             pathType: {{ .Values.ingress.management.pathType }}
@@ -41,5 +40,4 @@ spec:
                 port:
                   number: {{ .Values.management.service.port }}
           {{- end }}
-          */}}
 {{- end }}

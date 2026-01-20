@@ -13,7 +13,7 @@
 - Install and update helm repo
 
   ```bash
-  helm repo add https://dmdhrumilmistry.github.io/helm-charts
+  helm repo add dmdhrumilmistry https://dmdhrumilmistry.github.io/helm-charts
   helm repo update
   ```
 
