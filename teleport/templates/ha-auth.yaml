@@ -1,0 +1,173 @@
+{{- if eq (include "teleport.isHA" .) "true" }}
+{{- $fullName := include "teleport.auth.fullname" . -}}
+{{- $labels := include "teleport.componentLabels" (dict "root" . "component" "auth") -}}
+{{- $selector := include "teleport.componentSelectorLabels" (dict "root" . "component" "auth") -}}
+{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.host) -}}
+{{- fail "ha mode needs a PostgreSQL backend: set externalDatabase.host, or postgresql.enabled=true for a throwaway in-cluster database. SQLite cannot be shared between Auth replicas." -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.auth.replicaCount }}
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.auth.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "teleport.config.auth" . | sha256sum }}
+        {{- with .Values.auth.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "teleport.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "teleport.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        # Teleport creates its own databases and schema, but exits rather
+        # than retrying if PostgreSQL is not accepting connections yet.
+        - name: wait-for-postgres
+          image: {{ include "teleport.image" (dict "root" . "image" .Values.postgresql.image "defaultTag" .Values.postgresql.image.tag) }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"; do
+                echo "waiting for postgres at $PGHOST:$PGPORT ..."
+                sleep 2
+              done
+          env:
+            - name: PGHOST
+              value: {{ include "teleport.postgresql.host" . | quote }}
+            - name: PGPORT
+              value: {{ include "teleport.postgresql.port" . | quote }}
+            - name: PGUSER
+              value: {{ include "teleport.postgresql.username" . | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      {{- end }}
+      containers:
+        - name: teleport
+          image: {{ include "teleport.image" (dict "root" . "image" .Values.image "defaultTag" .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # No args: the image entrypoint is already
+          #   dumb-init teleport start -c /etc/teleport/teleport.yaml
+          # and anything passed here is appended to it, not substituted.
+          ports:
+            - name: auth
+              containerPort: 3025
+              protocol: TCP
+            - name: diag
+              containerPort: {{ .Values.diagPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet: { path: /healthz, port: diag }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet: { path: /readyz, port: diag }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            httpGet: { path: /healthz, port: diag }
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: config
+              mountPath: /etc/teleport
+              readOnly: true
+            - name: data
+              mountPath: {{ .Values.dataDir }}
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.auth.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ $fullName }}-config
+        # Cluster state lives in PostgreSQL; this is scratch space only.
+        # Session recordings are the exception — see auditSessionsURI.
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.auth.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.auth.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.auth.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: auth
+      port: 3025
+      targetPort: auth
+      protocol: TCP
+    - name: diag
+      port: {{ .Values.diagPort }}
+      targetPort: diag
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+{{- end }}

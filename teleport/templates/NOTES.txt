@@ -1,0 +1,82 @@
+Teleport {{ .Chart.AppVersion }} (Community Edition) installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Mode:    {{ include "teleport.mode" . }}
+Address: https://{{ include "teleport.publicAddr" . }}
+
+1. Point DNS at the proxy
+
+   Create an A record for {{ include "teleport.clusterName" . }} at:
+
+     kubectl get svc -n {{ .Release.Namespace }} {{ include "teleport.fullname" . }} -w
+
+   The name must match exactly. It is baked into the cluster's certificate
+   authorities on first start and cannot be changed later without
+   rebuilding the cluster from scratch.
+
+2. Create the first user
+
+     kubectl exec -n {{ .Release.Namespace }} {{ if eq (include "teleport.mode" .) "standalone" }}sts/{{ include "teleport.fullname" . }}{{ else }}deploy/{{ include "teleport.auth.fullname" . }}{{ end }} -- \
+       tctl users add admin --roles=editor,access --logins=root
+
+   That prints a signup link. Open it to set a password and enrol a second
+   factor.
+
+3. Connect
+
+     tsh login --proxy={{ include "teleport.publicAddr" . }} --user=admin
+     tsh ls
+{{- if .Values.kubernetesAccess.enabled }}
+     tsh kube ls
+     tsh kube login {{ .Values.kubernetesAccess.clusterName | default (include "teleport.clusterName" .) }}
+{{- end }}
+{{- if not (or .Values.tls.existingSecret .Values.tls.acme.enabled) }}
+
+WARNING: no certificate is configured, so Teleport generated a self-signed
+one. Browsers and tsh will refuse it without --insecure, which turns off
+the check that stops someone impersonating your cluster. Before real use,
+set tls.existingSecret to a cert-manager secret, or enable tls.acme.
+
+Teleport terminates TLS itself and cannot sit behind an ingress that does
+it instead: multiplex mode routes by TLS ALPN, and Kubernetes and database
+clients authenticate with mTLS.
+{{- end }}
+{{- if eq (include "teleport.mode" .) "ha" }}
+{{- if .Values.postgresql.enabled }}
+
+WARNING: postgresql.enabled is on. That database is a single replica with
+no backups and no failover — pointing a highly available control plane at
+it defeats the point. Use externalDatabase for anything real.
+{{- end }}
+{{- if and .Values.sessionRecording (ne .Values.sessionRecording "off") (not .Values.auditSessionsURI) }}
+
+WARNING: session recording is "{{ .Values.sessionRecording }}" but
+auditSessionsURI is unset, so each Auth replica stores recordings on its
+own ephemeral disk. Playback will hit the wrong replica and find nothing,
+and a restart loses them. Point auditSessionsURI at shared object storage.
+{{- end }}
+
+   Auth replicas: {{ .Values.auth.replicaCount }}. Each holds a PostgreSQL
+   replication slot, so max_replication_slots must be at least that high.
+{{- end }}
+
+4. Back up what cannot be regenerated
+{{- if eq (include "teleport.mode" .) "standalone" }}
+
+   The volume behind {{ include "teleport.fullname" . }}-0 holds the cluster's
+   certificate authorities. Lose it and every certificate Teleport has
+   issued becomes invalid, and every user and host must re-enrol.
+{{- else }}
+
+   Your PostgreSQL cluster-state database holds the certificate
+   authorities. Back it up like any other system of record.
+{{- end }}
+
+5. Check it over
+
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+     kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/part-of=teleport --tail=50
+
+LICENSING: Teleport is AGPL-3.0 from v15 on. Running this published image
+unmodified imposes no source-disclosure obligation on you. If you fork or
+patch Teleport and expose it over a network, §13 applies. See the chart
+README.

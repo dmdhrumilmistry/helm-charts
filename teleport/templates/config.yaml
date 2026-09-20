@@ -1,0 +1,56 @@
+{{/*
+teleport.yaml per role, held in Secrets rather than ConfigMaps: in ha
+mode the config carries the PostgreSQL connection string.
+*/}}
+{{- $ha := eq (include "teleport.isHA" .) "true" -}}
+{{- if not $ha }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "teleport.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "teleport.componentLabels" (dict "root" . "component" "standalone") | nindent 4 }}
+type: Opaque
+stringData:
+  teleport.yaml: |
+    {{- include "teleport.config.standalone" . | nindent 4 }}
+{{- else }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "teleport.auth.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "teleport.componentLabels" (dict "root" . "component" "auth") | nindent 4 }}
+type: Opaque
+stringData:
+  teleport.yaml: |
+    {{- include "teleport.config.auth" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "teleport.proxy.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "teleport.componentLabels" (dict "root" . "component" "proxy") | nindent 4 }}
+type: Opaque
+stringData:
+  teleport.yaml: |
+    {{- include "teleport.config.proxy" . | nindent 4 }}
+{{- if eq (include "teleport.agentsEnabled" .) "true" }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "teleport.agent.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "teleport.componentLabels" (dict "root" . "component" "agent") | nindent 4 }}
+type: Opaque
+stringData:
+  teleport.yaml: |
+    {{- include "teleport.config.agent" . | nindent 4 }}
+{{- end }}
+{{- end }}

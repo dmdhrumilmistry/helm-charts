@@ -1,0 +1,24 @@
+{{- if eq (include "teleport.isHA" .) "true" }}
+{{- range $component, $cfg := (dict "auth" .Values.auth "proxy" .Values.proxy) }}
+{{- if $cfg.podDisruptionBudget.enabled }}
+{{- $name := ternary (include "teleport.auth.fullname" $) (include "teleport.proxy.fullname" $) (eq $component "auth") }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "teleport.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  {{- if $cfg.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ $cfg.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ $cfg.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "teleport.componentSelectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}
+{{- end }}
