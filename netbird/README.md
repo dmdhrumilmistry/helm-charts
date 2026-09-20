@@ -211,7 +211,7 @@ by accident.
 > before you need it:
 >
 > ```bash
-> kubectl get secret -n netbird netbird-netbird-secrets -o yaml > netbird-secrets.yaml
+> kubectl get secret -n netbird netbird-secrets -o yaml > netbird-secrets.yaml
 > ```
 
 To manage them yourself, create a Secret with those four keys and set
@@ -253,20 +253,30 @@ which is merged over the generated `config.yaml` last. Schema:
 
 ## Troubleshooting
 
+The commands below assume the release is named `netbird`, as in the quick
+start. Objects are named after the release, and the chart name is dropped
+when the release name already contains it — so `helm install netbird`
+gives you `netbird-server`, while `helm install nb` gives you
+`nb-netbird-server`. Adjust accordingly, or just list them:
+
+```bash
+kubectl get pods,svc,ingress,secret -n netbird -l app.kubernetes.io/instance=netbird
+```
+
 **Peers see the API but never connect.** The gRPC Ingress is not reaching
 an h2c backend. Check that `ingress.controller` matches your controller,
 and that the annotation landed:
 
 ```bash
-kubectl get ingress -n netbird netbird-netbird-grpc -o yaml | grep -A5 annotations
-kubectl get svc -n netbird netbird-netbird-server-grpc -o yaml | grep -A3 annotations
+kubectl get ingress -n netbird netbird-grpc -o yaml | grep -A5 annotations
+kubectl get svc -n netbird netbird-server-grpc -o yaml | grep -A3 annotations
 ```
 
 **Peers connect but cannot reach each other.** STUN is not reachable at the
 public hostname. Test it:
 
 ```bash
-kubectl get svc -n netbird netbird-netbird-server-stun
+kubectl get svc -n netbird netbird-server-stun
 nc -zvu netbird.example.com 3478
 ```
 
@@ -311,4 +321,4 @@ There is no in-place migration path. Install fresh, then re-enrol peers.
 
 ## License
 
-MIT. See [LICENSE](../LICENSE).
+MIT. See [LICENSE](https://github.com/dmdhrumilmistry/helm-charts/blob/main/LICENSE).

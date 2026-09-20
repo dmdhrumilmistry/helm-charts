@@ -4,7 +4,7 @@ description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 1.0.0
+version: 1.0.1
 
 # Version of NetBird that this chart deploys by default.
 appVersion: "0.79.0"
@@ -31,6 +31,8 @@ maintainers:
 annotations:
   artifacthub.io/license: MIT
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Correct the object names in the README's troubleshooting and backup commands. They carried a doubled netbird- prefix that does not match what the chart renders.
     - kind: changed
       description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
     - kind: added
