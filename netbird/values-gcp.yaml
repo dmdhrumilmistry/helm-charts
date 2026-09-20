@@ -1,0 +1,124 @@
+# =====================================================================
+# Example overrides for Google Kubernetes Engine.
+#
+#   helm install netbird dmdhrumilmistry/netbird \
+#     -n netbird --create-namespace \
+#     -f values-gcp.yaml \
+#     --set global.domain=netbird.example.com
+#
+# Assumes ingress-nginx and cert-manager with a ClusterIssuer named
+# letsencrypt-prod. GKE's built-in GCE ingress is not used here: it has no
+# way to speak h2c to a backend without a BackendConfig per service, and
+# NetBird needs plaintext gRPC.
+# =====================================================================
+
+global:
+  domain: ""
+  tls: true
+
+ingress:
+  enabled: true
+  controller: nginx
+  className: nginx
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+server:
+  # Signal and relay hold per-connection state in memory, so this stays 1.
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    # premium-rwo = SSD persistent disk; standard-rwo = balanced disk.
+    storageClassName: premium-rwo
+
+  # STUN is UDP, which the GKE external passthrough load balancer handles
+  # natively. Reserve a static regional address and set loadBalancerIP if
+  # you want the address to survive a reinstall.
+  stun:
+    service:
+      enabled: true
+      type: LoadBalancer
+      # Preserves the client source address, which is the entire point of
+      # a STUN server.
+      externalTrafficPolicy: Local
+      loadBalancerIP: ""
+      annotations: {}
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Keep the server off preemptible/Spot nodes: a reschedule drops every
+  # peer connection it is holding.
+  nodeSelector:
+    cloud.google.com/gke-spot: "false"
+
+dashboard:
+  # Static assets only, so this scales freely.
+  replicaCount: 2
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: netbird
+          app.kubernetes.io/component: dashboard
+
+# ---------------------------------------------------------------------
+# Database
+#
+# The in-cluster StatefulSet below is fine to start with. For production,
+# switch it off and point externalDatabase at Cloud SQL, either through
+# the Cloud SQL Auth Proxy or a private IP.
+# ---------------------------------------------------------------------
+postgresql:
+  enabled: true
+  persistence:
+    size: 50Gi
+    storageClassName: premium-rwo
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+
+# postgresql:
+#   enabled: false
+# externalDatabase:
+#   host: 10.20.30.40       # Cloud SQL private IP, or 127.0.0.1 with the auth proxy
+#   port: 5432
+#   username: netbird
+#   password: ""            # prefer existingSecret over a literal here
+#   database: netbird
+#   activityDatabase: netbird_activity
+#   idpDatabase: netbird_idp
+#   sslmode: require
+
+serviceAccount:
+  create: true
+  annotations: {}
+    # Workload Identity, if you give NetBird access to Google APIs:
+    # iam.gke.io/gcp-service-account: netbird@my-project.iam.gserviceaccount.com

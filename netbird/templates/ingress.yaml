@@ -1,45 +1,128 @@
 {{- if .Values.ingress.enabled }}
+{{- $fullName := include "netbird.fullname" . -}}
+{{- $host := .Values.ingress.host | default (include "netbird.domain" .) -}}
+{{- $serverSvc := include "netbird.server.fullname" . -}}
+{{- $dashSvc := include "netbird.dashboard.fullname" . -}}
+{{- $tlsSecret := .Values.ingress.tls.secretName | default (printf "%s-tls" $fullName) -}}
+{{- $grpcTlsSecret := .Values.ingress.tls.grpcSecretName | default $tlsSecret -}}
+{{- $httpAnn := include "netbird.ingress.httpAnnotations" . -}}
+{{- $grpcAnn := include "netbird.ingress.grpcAnnotations" . -}}
+{{/*
+Two Ingress objects on the same host:
+  netbird      - dashboard, REST API, OAuth2 and the relay WebSocket
+  netbird-grpc - management and signal gRPC, which need an h2c backend
+
+Ingress has no way to set the backend protocol per path, so gRPC gets its
+own object. Path order matters on controllers that do not sort by
+specificity, so the catch-all for the dashboard is declared last.
+*/}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "netbird.fullname" . }}-ingress
+  name: {{ $fullName }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "netbird.labels" . | nindent 4 }}
+  {{- if $httpAnn }}
   annotations:
-    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- $httpAnn | nindent 4 }}
+  {{- end }}
 spec:
-  {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
   {{- end }}
   {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ .Values.ingress.host | default .Values.global.domain | quote }}
-      secretName: {{ .Values.ingress.tls.secretName }}
+        - {{ $host | quote }}
+      secretName: {{ $tlsSecret }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | default .Values.global.domain | quote }}
+    - host: {{ $host | quote }}
       http:
         paths:
-          {{- if .Values.ingress.dashboard.path }}
-          - path: {{ .Values.ingress.dashboard.path }}
-            pathType: {{ .Values.ingress.dashboard.pathType }}
+          - path: /api
+            pathType: Prefix
             backend:
               service:
-                name: {{ include "netbird.fullname" . }}-dashboard
+                name: {{ $serverSvc }}
                 port:
-                  number: {{ .Values.dashboard.service.http.port }}
-          {{- end }}
-          {{/*
-          {{- if .Values.ingress.management.path }}
-          - path: {{ .Values.ingress.management.path }}
-            pathType: {{ .Values.ingress.management.pathType }}
+                  name: http
+          - path: /oauth2
+            pathType: Prefix
             backend:
               service:
-                name: {{ include "netbird.fullname" . }}-management
+                name: {{ $serverSvc }}
                 port:
-                  number: {{ .Values.management.service.port }}
+                  name: http
+          - path: /relay
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serverSvc }}
+                port:
+                  name: http
+          - path: /ws-proxy
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serverSvc }}
+                port:
+                  name: http
+          {{- if .Values.dashboard.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $dashSvc }}
+                port:
+                  name: http
           {{- end }}
-          */}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-grpc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.labels" . | nindent 4 }}
+  {{- if $grpcAnn }}
+  annotations:
+    {{- $grpcAnn | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $grpcTlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /management.ManagementService
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serverSvc }}-grpc
+                port:
+                  name: grpc
+          - path: /signalexchange.SignalExchange
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serverSvc }}-grpc
+                port:
+                  name: grpc
+          - path: /management.ProxyService
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serverSvc }}-grpc
+                port:
+                  name: grpc
 {{- end }}

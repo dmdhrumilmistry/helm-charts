@@ -1,299 +1,488 @@
-# -----------------------------------------------------------------
-# Global Settings
-# -----------------------------------------------------------------
+# =====================================================================
+# NetBird — self-hosted
+#
+# A minimal install needs exactly one value:
+#
+#   helm install netbird dmdhrumilmistry/netbird \
+#     --namespace netbird --create-namespace \
+#     --set global.domain=netbird.example.com
+#
+# Everything else has a working default: an in-cluster PostgreSQL, a
+# generated set of secrets, and NetBird's built-in local user management
+# (no external identity provider required). Point the domain's DNS record
+# at your ingress controller, open UDP 3478, then browse to the domain and
+# create the first admin account in the setup wizard.
+# =====================================================================
+
 global:
-  # The primary domain for your Netbird services.
-  # This is used to configure all components.
-  domain: "selfhosted.netbird.local"
+  # -------------------------------------------------------------------
+  # REQUIRED. The public FQDN NetBird is served on. Used for the peer
+  # exposedAddress, the OIDC issuer, the dashboard API endpoints and the
+  # ingress host. Peers and browsers must both be able to resolve it.
+  # -------------------------------------------------------------------
+  domain: ""
 
-# -----------------------------------------------------------------
-# Secret Management
-# -----------------------------------------------------------------
-# The name of the *existing* Kubernetes Secret that contains all
-# necessary keys (POSTGRES_USER, AUTH_CLIENT_ID, NB_AUTH_SECRET, etc.)
-# You must create this secret manually *before* installing the chart.
-existingSecretName: ""
+  # Serve over HTTPS. Keep true for anything but throwaway local testing:
+  # NetBird peers and the embedded IdP expect a trusted TLS endpoint.
+  tls: true
 
-secrets:
-  # Database 
-  # POSTGRES_DB: "netbirddb"
-  # POSTGRES_USER: "netbird"
-  # POSTGRES_PASSWORD: "SuperSecurePassword123!"
+  # Public port. Leave empty to use 443 (tls: true) or 80 (tls: false).
+  port: ""
 
-  # Dashboard
-  AUTH_CLIENT_ID: ""
-  AUTH_CLIENT_SECRET: ""
-  AUTH_AUDIENCE: ""
-  # NB_ACTIVITY_EVENT_STORE_ENGINE: "postgres"
-  # NB_ACTIVITY_EVENT_POSTGRES_DSN: "postgresql://netbird:SuperSecurePassword123!@postgres:5432/netbirddb"
+  # Cluster DNS suffix. Only change on clusters not using cluster.local.
+  clusterDomain: cluster.local
 
-  # Relay
-  NB_AUTH_SECRET: "4XF0OpISLgeb86c3LKApIEIrjSXttR6A4960Deij3O0"
+  # Prefix applied to every image (e.g. a pull-through mirror or ECR/GAR).
+  imageRegistry: ""
+  imagePullSecrets: []
 
-  # Management (if using DB)
-  # NETBIRD_STORE_ENGINE_POSTGRES_DSN: "postgresql://netbird:SuperSecurePassword123!@postgres:5432/netbirddb"
-  NETBIRD_STORE_ENGINE_MYSQL_DSN: ""
-# -----------------------------------------------------------------
-# ConfigMaps
-# -----------------------------------------------------------------
-# Contents for the netbird-config and coturn-config ConfigMaps.
-# You MUST provide the content for turnserver.conf and management.json here.
-configmaps:
+# Extra labels added to every object this chart creates.
+commonLabels: {}
+
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+serviceAccount:
   create: true
-  
-  # Content for management.json
-  # below is an invalid example; replace with your actual configuration
-  managementJson: |
-    {
-      "turn": {
-        "external": {
-          "user": "netbird-user",
-          "password": "netbird-password"
-        }
-      }
-    }
+  name: ""
+  annotations: {}
+    # AWS IRSA:
+    #   eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/netbird
+    # GKE Workload Identity:
+    #   iam.gke.io/gcp-service-account: netbird@my-project.iam.gserviceaccount.com
+  automountServiceAccountToken: false
 
-  # Content for turnserver.conf
-  # below is an invalid example; replace with your actual configuration
-  turnserverConf: |
-    # Example turnserver.conf content
-    # Replace with your actual configuration
-    lt-cred-mech
-    user=netbird-user:netbird-password
-    realm=netbird.selfhosted
+# =====================================================================
+# Secrets
+#
+# Every value below is generated on first install and then read back from
+# the cluster on upgrade, so re-running helm never rotates them by
+# accident. Set one explicitly only if you manage it elsewhere.
+#
+# WARNING: storeEncryptionKey encrypts setup keys and API tokens at rest.
+# Losing it means losing access to that data. Back it up:
+#   kubectl -n <ns> get secret <release>-netbird-secrets -o yaml
+# =====================================================================
+secrets:
+  # Shared secret the relay uses to validate peer credentials.
+  authSecret: ""
+  # base64 of a 32-byte key. Encrypts sensitive columns in the database.
+  storeEncryptionKey: ""
+  # 16, 24 or 32 bytes. Encrypts the embedded IdP session cookie.
+  sessionCookieEncryptionKey: ""
+  # Password for the in-cluster PostgreSQL (ignored when postgresql.enabled is false).
+  postgresPassword: ""
 
-  # Content for Let's Encrypt certificates
-  letsencryptFullchain: |
-    -----BEGIN CERTIFICATE-----
-    MIIF...
-    -----END CERTIFICATE-----
-  
-  letsencryptPrivkey: |
-    -----BEGIN PRIVATE KEY-----
-    MIIE...
-    -----END PRIVATE KEY-----
+# Use a Secret you created yourself instead of the generated one. It must
+# carry the same keys as `secrets` above.
+existingSecret: ""
 
-# -----------------------------------------------------------------
-# Persistence
-# -----------------------------------------------------------------
-# Global persistence settings. Can be overridden per-component.
-persistence:
-  # Your original file used ReadWriteOnce, common for single-node (k3s)
-  # or block storage. Change to "ReadWriteMany" for multi-node with NFS/Ceph.
-  accessModes: [ "ReadWriteOnce" ]
-  storageClassName: "" # Set to your StorageClass, or "" for default
-
-# -----------------------------------------------------------------
-# PostgreSQL Database
-# -----------------------------------------------------------------
-# Deploys a self-contained PostgreSQL instance.
-# Set 'enabled: false' if you use an external database.
-postgres:
-  enabled: true
+# =====================================================================
+# NetBird server
+#
+# One image, one workload: management, signal, relay and STUN.
+# https://docs.netbird.io/selfhosted/maintenance/configuration-files
+# =====================================================================
+server:
   image:
-    repository: "postgres"
-    tag: "18" # Your original manifest used "18", which is not a valid tag. Using "16".
+    registry: ""
+    repository: netbirdio/netbird-server
+    # Defaults to the chart's appVersion.
+    tag: ""
     pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP # Changed from LoadBalancer, as it's typically internal
-    port: 5432 # TODO: make this port dynamic in postgres.yaml
-  persistence:
-    enabled: true
-    size: 3Gi
-    # accessModes: ... (uses global default)
-    # storageClassName: ... (uses global default)
 
-# -----------------------------------------------------------------
-# Netbird Dashboard
-# -----------------------------------------------------------------
+  # Keep at 1. NetBird's open-source signal and relay keep per-connection
+  # state in memory and have no cross-replica bus, so a second replica
+  # will drop peer signalling. Horizontal scaling needs the Enterprise
+  # build with NATS and Redis.
+  replicaCount: 1
+
+  # Port the container listens on for HTTP, gRPC and relay WebSockets.
+  # TLS is terminated by the ingress controller.
+  containerPort: 80
+
+  config:
+    logLevel: info
+    logFile: console
+    disableAnonymousMetrics: true
+    disableGeoliteUpdate: false
+    metricsPort: 9090
+    healthcheckPort: 9000
+    dataDir: /var/lib/netbird
+
+    auth:
+      # Built-in local user management (embedded Dex). Leave false: this
+      # is what removes the need for an external IdP. Extra SSO providers
+      # (Google, Microsoft, Okta, ...) are added afterwards from the
+      # dashboard under Settings -> Identity Providers.
+      localAuthDisabled: false
+      signKeyRefreshEnabled: true
+      # Where the netbird CLI parks its OAuth callback.
+      cliRedirectURIs:
+        - "http://localhost:53000/"
+      # OAuth2 grant types exposed by the embedded IdP. Empty keeps the
+      # Dex defaults (authorization_code, refresh_token, device_code).
+      grantTypes: []
+      # Optional: create the first admin at startup instead of using the
+      # /setup wizard. Prefer the wizard; a password here lands in a Secret.
+      owner:
+        email: ""
+        password: ""
+
+    reverseProxy:
+      # Which source networks may set X-Forwarded-For, i.e. where your
+      # ingress controller pods live. Left empty NetBird trusts 0.0.0.0/0
+      # and logs a spoofing warning, so the defaults below cover the usual
+      # pod and service CIDRs. Narrow them to your own for tighter control.
+      trustedPeers:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - fd00::/8
+      # Proxy addresses stripped from the X-Forwarded-For chain when
+      # working out the real client IP.
+      trustedHTTPProxies:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - fd00::/8
+      # Positional alternative to trustedHTTPProxies. NetBird warns when
+      # this is set, because a wrong count silently picks the wrong IP.
+      trustedHTTPProxiesCount: 0
+
+    # Merged over everything generated above, last write wins. Use it for
+    # config.yaml keys this chart does not model yet.
+    # https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example
+    extraConfig: {}
+
+  # HTTP + gRPC service, fronted by the ingress controller.
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+
+  # Separate Service for gRPC so the backend can be switched to h2c
+  # independently of plain HTTP.
+  grpcService:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+
+  # ---------------------------------------------------------------
+  # STUN (UDP 3478)
+  #
+  # Cannot go through an HTTP ingress and must be reachable at the same
+  # hostname as global.domain. Your DNS record therefore has to point at
+  # an address that answers both TCP 443 and UDP 3478.
+  #
+  #  * single node / k3s  -> hostPort.enabled: true (binds the node IP)
+  #  * MetalLB            -> share the ingress IP via
+  #                          metallb.universe.tf/allow-shared-ip
+  #  * AWS / GCP          -> a UDP LoadBalancer, then add its address as a
+  #                          second A record for the domain
+  # ---------------------------------------------------------------
+  stun:
+    # UDP ports the embedded STUN server listens on. Emptying this list
+    # does NOT disable STUN — NetBird falls back to 3478. To use external
+    # STUN servers instead, set `stuns` under config.extraConfig, which
+    # turns the embedded one off.
+    ports:
+      - 3478
+    service:
+      enabled: true
+      type: LoadBalancer
+      annotations: {}
+        # AWS NLB:
+        #   service.beta.kubernetes.io/aws-load-balancer-type: external
+        #   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+        #   service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      loadBalancerIP: ""
+      loadBalancerClass: ""
+      externalTrafficPolicy: Local
+    # Bind the STUN ports straight onto the node instead of (or as well
+    # as) a LoadBalancer.
+    hostPort:
+      enabled: false
+
+  persistence:
+    # /var/lib/netbird. Holds the GeoLite database and, when PostgreSQL is
+    # off, the SQLite store. Required whenever postgresql.enabled is false
+    # and externalDatabase.host is unset.
+    enabled: true
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+    existingClaim: ""
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+
+  # Off by default, and not merely as a precaution: see replicaCount.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    enabled: true
+    # Deliberately NOT the /health listener on config.healthcheckPort.
+    # That endpoint dials the relay back through the public URL and reports
+    # unhealthy until the public certificate validates — which cannot happen
+    # while the pod is unready and therefore absent from the ingress backend
+    # pool. /api/instance is served by management on the same port peers use.
+    path: /api/instance
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  startupProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 30
+
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    fsGroup: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsNonRoot: false
+    capabilities:
+      drop:
+        - ALL
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 30
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# =====================================================================
+# Dashboard (web UI)
+# =====================================================================
 dashboard:
   enabled: true
-  replicas: 1
+
   image:
-    repository: "netbirdio/dashboard"
-    tag: "latest"
+    registry: ""
+    repository: netbirdio/dashboard
+    # Upstream publishes no semver tag for the dashboard; latest is what
+    # the official installer uses. Pin a sha-<digest> tag for immutability.
+    tag: latest
     pullPolicy: IfNotPresent
-  
-  # Dashboard environment configuration
+
+  replicaCount: 1
+
   config:
-    authAuthority: "https://accounts.google.com"
-    useAuth0: "false"
-    authSupportedScopes: "openid profile email"
-    authRedirectUri: "/auth"
-    authSilentRedirectUri: "/silent-auth"
-    netbirdTokenSource: "idToken"
-    nginxSslPort: "443"
+    # Scopes requested from the IdP. `groups` is what the embedded IdP
+    # uses to map users into NetBird groups.
+    authSupportedScopes: "openid profile email groups"
+    # OAuth client registered by the embedded IdP for the dashboard.
+    authClientId: netbird-dashboard
+    authAudience: netbird-dashboard
+    authClientSecret: ""
+    # Set only when authenticating against Auth0 directly.
+    useAuth0: false
 
   service:
     type: ClusterIP
-    http:
-      port: 80
-      targetPort: 80
-    https:
-      port: 9443 # External port (e.g., for Ingress)
-      targetPort: 443 # Container port
+    port: 80
+    annotations: {}
 
-  # Persistence for Let's Encrypt certificates generated by the dashboard
-  letsencryptPersistence: # TODO: this is not being used, instead configmap is being used
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+
+  # Safe to scale: the dashboard serves static assets and keeps no state.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+
+  livenessProbe:
     enabled: true
-    size: 1Gi
-    # accessModes: ... (uses global default)
-    # storageClassName: ... (uses global default)
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
 
-# -----------------------------------------------------------------
-# Netbird Signal
-# -----------------------------------------------------------------
-signal:
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  # The stock dashboard image runs nginx as root and writes to /var/lib/nginx
+  # and /run/nginx. Dropping ALL capabilities takes CAP_DAC_OVERRIDE away and
+  # nginx then fails to start with EACCES, so capabilities are left alone
+  # here. Switch to a -rootless image tag if you need a tighter context.
+  securityContext:
+    allowPrivilegeEscalation: false
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  extraEnv: []
+
+# =====================================================================
+# PostgreSQL
+#
+# A single-replica StatefulSet running the official postgres image. Good
+# enough for a self-hosted NetBird; point externalDatabase at a managed
+# service (RDS, Cloud SQL, an operator) for anything larger.
+# =====================================================================
+postgresql:
   enabled: true
-  replicas: 1
+
   image:
-    repository: "netbirdio/signal"
-    tag: "latest"
+    registry: ""
+    repository: postgres
+    tag: "17-alpine"
     pullPolicy: IfNotPresent
 
+  auth:
+    username: netbird
+    database: netbird
+    # Database for the activity/audit log. Created by the init script.
+    activityDatabase: netbird_activity
+    # Database for the embedded IdP (Dex). Created by the init script.
+    idpDatabase: netbird_idp
+
   service:
-    type: LoadBalancer
-    port: 10000
-    targetPort: 10000
+    type: ClusterIP
+    port: 5432
+    annotations: {}
 
   persistence:
     enabled: true
-    size: 1Gi
-    # accessModes: ... (uses global default)
-    # storageClassName: ... (uses global default)
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+    annotations: {}
 
-# -----------------------------------------------------------------
-# Netbird Relay
-# -----------------------------------------------------------------
-relay:
-  enabled: true
-  replicas: 1
-  image:
-    repository: "netbirdio/relay"
-    tag: "latest"
-    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
 
-  config:
-    logLevel: "info"
-    listenAddress: ":33080"
-    # Port must match listenAddress
-    exposedPort: 33080 
+  # Extra `-c key=value` server flags.
+  extraArgs: []
 
-  service:
-    type: LoadBalancer
-    port: 33080
-    targetPort: 33080
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    fsGroup: 999
+    runAsUser: 999
+    runAsGroup: 999
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
 
-# -----------------------------------------------------------------
-# Netbird Management
-# -----------------------------------------------------------------
-management:
-  enabled: true
-  replicas: 1
-  image:
-    repository: "netbirdio/management"
-    tag: "latest"
-    pullPolicy: IfNotPresent
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
 
-  config:
-    # Command-line args for the management container
-    port: "443"
-    logFile: "console"
-    logLevel: "info"
-    disableAnonymousMetrics: "true"
-    dnsDomain: "netbird.selfhosted"
+# Used when postgresql.enabled is false. Leave host empty to fall back to
+# the SQLite store (single replica, no HA; fine for small deployments).
+externalDatabase:
+  host: ""
+  port: 5432
+  username: netbird
+  password: ""
+  database: netbird
+  activityDatabase: netbird_activity
+  idpDatabase: netbird_idp
+  sslmode: require
 
-  service:
-    type: LoadBalancer
-    port: 8443 # External port
-    targetPort: 443 # Container port (matches --port arg)
-  
-  grpcService:
-    type: LoadBalancer
-    port: 33073
-    targetPort: 33073
-  
-  persistence:
-    enabled: true
-    size: 1Gi
-    # accessModes: ... (uses global default)
-    # storageClassName: ... (uses global default)
-
-# -----------------------------------------------------------------
-# Coturn (TURN Server)
-# -----------------------------------------------------------------
-coturn:
-  enabled: true
-  replicas: 1
-  image:
-    repository: "coturn/coturn"
-    tag: "latest"
-    pullPolicy: IfNotPresent
-
-  service:
-    type: LoadBalancer
-    port: 3478
-    targetPort: 3478
-
-# -----------------------------------------------------------------
-# Adminer (Database GUI)
-# -----------------------------------------------------------------
-# Disabled by default, was commented out in your original file.
-adminer:
-  enabled: false
-  replicas: 1
-  image:
-    repository: "adminer"
-    tag: "latest"
-    pullPolicy: IfNotPresent
-  
-  config:
-    defaultServer: "{{ include \"netbird.fullname\" . }}-postgres" # Service name of the DB
-    design: "lucas"
-
-  service:
-    type: LoadBalancer
-    port: 8080
-    targetPort: 8080
-
-
-# -----------------------------------------------------------------
+# =====================================================================
 # Ingress
-# -----------------------------------------------------------------
+#
+# Two Ingress objects are created: one for HTTP (dashboard, REST API,
+# OAuth2, relay WebSocket) and one for gRPC (management and signal), which
+# needs an HTTP/2-cleartext backend.
+# =====================================================================
 ingress:
   enabled: true
 
-  # If you use an Ingress Controller that requires a specific class.
-  # For NGINX: "nginx"
-  # For Traefik: "traefik"
+  # traefik | nginx | other
+  # Picks the annotations that make the gRPC backend speak h2c. Use
+  # `other` and set the annotations yourself for any other controller.
+  controller: nginx
+
+  # IngressClass name. Empty uses the cluster default.
   className: ""
 
-  # Annotations for your Ingress controller
-  # (e.g., cert-manager, traefik, nginx)
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    # For NGINX:
-    # nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-
-  # Hostname for the Ingress.
-  # Defaults to the 'global.domain' value if left empty.
+  # Host to serve on. Defaults to global.domain.
   host: ""
 
-  # TLS configuration
+  annotations: {}
+  grpcAnnotations: {}
+
   tls:
     enabled: true
-    # The name of the secret to store the certificate
-    # This secret will be created by cert-manager
-    secretName: "letsencrypt-certs"
+    # cert-manager ClusterIssuer to request a certificate from. Empty means
+    # you supply the secret yourself, or terminate TLS somewhere upstream.
+    clusterIssuer: ""
+    # Defaults to <release>-netbird-tls.
+    secretName: ""
+    # Secret for the gRPC Ingress. Defaults to the same secret.
+    grpcSecretName: ""
 
-  # Path for the Netbird Dashboard
-  dashboard:
-    path: /
-    pathType: ImplementationSpecific # Or Prefix
-
-  ## Feature not implemented in chart yet. Hence, commented out.
-  # Path for the Netbird Management API (uncomment to enable)
-  # This matches the commented-out path in your original file.
-  # management:
-  #   path: /api
-  #   pathType: Prefix
+# =====================================================================
+# Tests (helm test)
+# =====================================================================
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: curlimages/curl
+    tag: "8.11.1"

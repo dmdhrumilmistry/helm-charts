@@ -1,15 +1,52 @@
+{{- if .Values.tests.enabled }}
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "netbird.fullname" . }}-test-connection"
+  name: {{ include "netbird.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "netbird.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": test
+    helm.sh/hook: test
+    # Kept after a run so `helm test --logs` and kubectl can still read it.
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
-  containers:
-    - name: wget
-      image: busybox
-      command: ['wget']
-      args: ['{{ include "netbird.fullname" . }}:{{ .Values.dashboard.service.http.port }}']
   restartPolicy: Never
+  containers:
+    - name: probe
+      image: {{ include "netbird.image" (dict "root" . "image" .Values.tests.image "defaultTag" .Values.tests.image.tag) }}
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          echo "==> server: OIDC discovery (embedded IdP)"
+          curl -fsS "http://{{ include "netbird.server.fullname" . }}:{{ .Values.server.service.port }}/oauth2/.well-known/openid-configuration" > /dev/null
+          echo "    ok"
+
+          echo "==> server: setup status"
+          curl -fsS "http://{{ include "netbird.server.fullname" . }}:{{ .Values.server.service.port }}/api/instance"
+          echo ""
+          {{- if .Values.dashboard.enabled }}
+
+          echo "==> dashboard: index"
+          curl -fsS "http://{{ include "netbird.dashboard.fullname" . }}:{{ .Values.dashboard.service.port }}/" > /dev/null
+          echo "    ok"
+          {{- end }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        # curlimages/curl declares a named user, which the kubelet cannot
+        # check against runAsNonRoot, so the uid is spelled out.
+        runAsUser: 100
+        runAsGroup: 101
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+{{- end }}

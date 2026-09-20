@@ -1,27 +1,43 @@
 apiVersion: v2
 name: netbird
-description: A Helm chart for deploying a self-hosted Netbird stack.
-
-# A chart can be either an 'application' or a 'library' chart.
-#
-# Application charts are a collection of templates that can be packaged into versioned archives
-# to be deployed.
-#
-# Library charts provide useful utilities or functions for the chart developer. They're included as
-# a dependency of application charts to inject those utilities and functions into the rendering
-# pipeline. Library charts do not define any templates and therefore cannot be deployed.
+description: Self-hosted NetBird (WireGuard-based overlay network) with built-in local user management, PostgreSQL and zero external IdP required.
 type: application
 
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.1.0
+# Chart version. Bump on every change to the chart or its templates.
+version: 1.0.0
 
-# Icon for the chart
+# Version of NetBird that this chart deploys by default.
+appVersion: "0.79.0"
+
 icon: https://avatars.githubusercontent.com/u/100464677
 
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
-appVersion: "v0.0.1-beta"
+home: https://netbird.io
+sources:
+  - https://github.com/netbirdio/netbird
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - netbird
+  - wireguard
+  - vpn
+  - zero-trust
+  - overlay-network
+  - mesh
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/changes: |
+    - kind: changed
+      description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
+    - kind: added
+      description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.
+    - kind: added
+      description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.
+    - kind: added
+      description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.
+    - kind: removed
+      description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.

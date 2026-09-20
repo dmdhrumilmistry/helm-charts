@@ -1,34 +1,50 @@
 {{/*
-{{- if .Values.autoscaling.enabled }}
+Autoscaling.
+
+The dashboard is stateless and scales freely. The server is a different
+story: open-source signal and relay hold per-connection state in memory
+with no cross-replica bus, so it is capped at one replica and the HPA is
+only useful as a guard rail. Horizontal scaling of the server needs the
+Enterprise build with NATS and Redis.
+*/}}
+{{- range $component, $cfg := (dict "dashboard" .Values.dashboard "server" .Values.server) }}
+{{- if and $cfg.autoscaling.enabled (or (ne $component "dashboard") $.Values.dashboard.enabled) }}
+{{- $name := ternary (include "netbird.dashboard.fullname" $) (include "netbird.server.fullname" $) (eq $component "dashboard") }}
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "netbird.fullname" . }}
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    {{- include "netbird.labels" . | nindent 4 }}
+    {{- include "netbird.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "netbird.fullname" . }}
-  minReplicas: {{ .Values.autoscaling.minReplicas }}
-  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+    name: {{ $name }}
+  minReplicas: {{ $cfg.autoscaling.minReplicas }}
+  maxReplicas: {{ $cfg.autoscaling.maxReplicas }}
   metrics:
-    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if $cfg.autoscaling.targetCPUUtilizationPercentage }}
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+          averageUtilization: {{ $cfg.autoscaling.targetCPUUtilizationPercentage }}
     {{- end }}
-    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- if $cfg.autoscaling.targetMemoryUtilizationPercentage }}
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+          averageUtilization: {{ $cfg.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
+  {{- with $cfg.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}
-*/}}
+{{- end }}
