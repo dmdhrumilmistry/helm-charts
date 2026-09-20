@@ -3,6 +3,8 @@ entries:
   netbird:
   - annotations:
       artifacthub.io/changes: |
+        - kind: fixed
+          description: Correct the object names in the README's troubleshooting and backup commands. They carried a doubled netbird- prefix that does not match what the chart renders.
         - kind: changed
           description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
         - kind: added
@@ -16,7 +18,46 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 0.79.0
-    created: "2026-09-20T18:33:15.6395881+05:30"
+    created: "2026-09-20T20:04:33.7763116+05:30"
+    description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
+      local user management, PostgreSQL and zero external IdP required.
+    digest: 156dec47c97916401be00a97d0255eccbd53be590668e5dd23518ee4406d3ccd
+    home: https://netbird.io
+    icon: https://avatars.githubusercontent.com/u/100464677
+    keywords:
+    - netbird
+    - wireguard
+    - vpn
+    - zero-trust
+    - overlay-network
+    - mesh
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: netbird
+    sources:
+    - https://github.com/netbirdio/netbird
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/netbird/netbird-1.0.1.tgz
+    version: 1.0.1
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
+          description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
+        - kind: added
+          description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.
+        - kind: added
+          description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.
+        - kind: added
+          description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.
+        - kind: removed
+          description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.
+      artifacthub.io/license: MIT
+    apiVersion: v2
+    appVersion: 0.79.0
+    created: "2026-09-20T20:04:33.7752888+05:30"
     description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
       local user management, PostgreSQL and zero external IdP required.
     digest: b5bfdd9ad84bb4c2de2319ba441eb7853932c2ce74e85306f82d8ea4c03c3feb
@@ -42,7 +83,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: v0.0.1-beta
-    created: "2026-09-20T18:33:15.6379996+05:30"
+    created: "2026-09-20T20:04:33.774264+05:30"
     description: A Helm chart for deploying a self-hosted Netbird stack.
     digest: 43ef42b764675dd0ef79fa995bc26571d86162c0022a2b715661622ee3b1c72f
     icon: https://avatars.githubusercontent.com/u/100464677
@@ -51,4 +92,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/netbird/netbird-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-20T18:33:15.636982+05:30"
+generated: "2026-09-20T20:04:33.7725438+05:30"
