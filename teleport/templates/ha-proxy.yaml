@@ -1,0 +1,194 @@
+{{- if eq (include "teleport.isHA" .) "true" }}
+{{- $fullName := include "teleport.proxy.fullname" . -}}
+{{- $labels := include "teleport.componentLabels" (dict "root" . "component" "proxy") -}}
+{{- $selector := include "teleport.componentSelectorLabels" (dict "root" . "component" "proxy") -}}
+{{- $separate := eq .Values.proxy.listenerMode "separate" -}}
+{{- if and .Values.tls.acme.enabled (gt (int .Values.proxy.replicaCount) 1) -}}
+{{- fail "tls.acme.enabled with more than one proxy replica is unsafe: replicas race on the same ACME order and can trip Let's Encrypt failed-validation limits, locking the cluster out of certificate renewal. Use tls.existingSecret with cert-manager instead." -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  {{- if not .Values.proxy.autoscaling.enabled }}
+  replicas: {{ .Values.proxy.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.proxy.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "teleport.config.proxy" . | sha256sum }}
+        {{- with .Values.proxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "teleport.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "teleport.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      containers:
+        - name: teleport
+          image: {{ include "teleport.image" (dict "root" . "image" .Values.image "defaultTag" .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # No args: the image entrypoint is already
+          #   dumb-init teleport start -c /etc/teleport/teleport.yaml
+          # and anything passed here is appended to it, not substituted.
+          ports:
+            - name: web
+              containerPort: 3080
+              protocol: TCP
+            - name: diag
+              containerPort: {{ .Values.diagPort }}
+              protocol: TCP
+            {{- if $separate }}
+            - name: ssh
+              containerPort: 3023
+              protocol: TCP
+            - name: tunnel
+              containerPort: 3024
+              protocol: TCP
+            - name: kube
+              containerPort: 3026
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet: { path: /healthz, port: diag }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet: { path: /readyz, port: diag }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            httpGet: { path: /healthz, port: diag }
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: config
+              mountPath: /etc/teleport
+              readOnly: true
+            # Mounted as a file rather than inlined into teleport.yaml, so
+            # the token never lands in the config blob.
+            - name: join-token
+              mountPath: /etc/teleport-join
+              readOnly: true
+            - name: data
+              mountPath: {{ .Values.dataDir }}
+            {{- if .Values.tls.existingSecret }}
+            - name: tls
+              mountPath: /etc/teleport-tls
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ $fullName }}-config
+        - name: join-token
+          secret:
+            secretName: {{ include "teleport.secretName" . }}
+            items:
+              - key: joinToken
+                path: token
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.tls.existingSecret }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+        {{- end }}
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "teleport.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.proxy.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.proxy.service.type }}
+  {{- with .Values.proxy.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.proxy.service.loadBalancerClass }}
+  loadBalancerClass: {{ . | quote }}
+  {{- end }}
+  {{- if and (eq .Values.proxy.service.type "LoadBalancer") .Values.proxy.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.proxy.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: web
+      port: {{ .Values.proxy.service.port }}
+      targetPort: web
+      protocol: TCP
+      {{- with (index .Values.proxy.service.nodePorts "web") }}
+      nodePort: {{ . }}
+      {{- end }}
+    {{- if $separate }}
+    - name: ssh
+      port: 3023
+      targetPort: ssh
+      protocol: TCP
+    - name: tunnel
+      port: 3024
+      targetPort: tunnel
+      protocol: TCP
+    - name: kube
+      port: 3026
+      targetPort: kube
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- $selector | nindent 4 }}
+{{- end }}

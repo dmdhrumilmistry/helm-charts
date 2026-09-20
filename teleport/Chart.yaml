@@ -1,0 +1,55 @@
+apiVersion: v2
+name: teleport
+description: Self-hosted Teleport Community Edition — SSH, Kubernetes, application and database access with short-lived certificates. Single-node or HA on PostgreSQL.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of Teleport Community Edition this chart deploys by default.
+appVersion: "18.10.0"
+
+icon: https://goteleport.com/static/teleport-symbol-bimi.svg
+
+home: https://goteleport.com
+sources:
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - teleport
+  - ssh
+  - kubernetes
+  - bastion
+  - zero-trust
+  - access-proxy
+  - certificate-authority
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # This chart is MIT. It deploys Teleport Community Edition, which upstream
+  # licenses under AGPL-3.0 from version 15 onward. The chart contains no
+  # Teleport source and redistributes no AGPL files; it only references the
+  # published community container image. See the README for what AGPL does
+  # and does not require of you.
+  artifacthub.io/license: MIT
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/images: |
+    - name: teleport
+      image: public.ecr.aws/gravitational/teleport-distroless:18.10.0
+  artifacthub.io/links: |
+    - name: Teleport source (AGPL-3.0)
+      url: https://github.com/gravitational/teleport
+    - name: Teleport documentation
+      url: https://goteleport.com/docs/
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. Teleport Community Edition with standalone and HA modes.
+    - kind: added
+      description: Standalone mode runs Auth and Proxy in one process on an SQLite backend.
+    - kind: added
+      description: HA mode splits Auth and Proxy across replicas on a PostgreSQL backend.
+    - kind: added
+      description: Kubernetes, application and database access, with the RBAC Kubernetes access requires.

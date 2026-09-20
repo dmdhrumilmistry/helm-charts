@@ -1,0 +1,64 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "teleport.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "teleport.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    # Kept after a run so `helm test --logs` and kubectl can still read it.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: {{ include "teleport.image" (dict "root" . "image" .Values.tests.image "defaultTag" .Values.tests.image.tag) }}
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          # -k because the certificate is issued for the public name, which
+          # does not resolve to this in-cluster Service.
+          BASE="https://{{ include "teleport.fullname" . }}:{{ .Values.proxy.service.port }}"
+          HOST="{{ include "teleport.clusterName" . }}"
+          # The Host header must be the cluster name. Addressed by the
+          # Service name instead, Teleport treats the request as app access
+          # and answers with a redirect rather than the proxy's own API.
+
+          echo "==> proxy: web login page"
+          curl -fsSk -H "Host: $HOST" -o /dev/null "$BASE/web/login"
+          echo "    ok"
+
+          echo "==> proxy: cluster identity"
+          curl -fsSk -H "Host: $HOST" "$BASE/webapi/ping" > /tmp/ping.json
+          cat /tmp/ping.json; echo ""
+
+          echo "==> ping reports auth type {{ .Values.authentication.type }}"
+          grep -q '"type":"{{ .Values.authentication.type }}"' /tmp/ping.json \
+            && echo "    ok" \
+            || { echo "    FAILED: expected auth type {{ .Values.authentication.type }}"; exit 1; }
+
+          echo "==> proxy advertises the configured cluster name"
+          grep -q "$HOST" /tmp/ping.json \
+            && echo "    ok" \
+            || { echo "    FAILED: $HOST absent from /webapi/ping"; exit 1; }
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        # curlimages/curl declares a named user, which the kubelet cannot
+        # check against runAsNonRoot, so the uid is spelled out.
+        runAsUser: 100
+        runAsGroup: 101
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+{{- end }}

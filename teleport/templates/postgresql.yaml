@@ -1,0 +1,172 @@
+{{- if .Values.postgresql.enabled }}
+{{- if ne (include "teleport.isHA" .) "true" -}}
+{{- fail "postgresql.enabled only applies in ha mode. Standalone uses the SQLite backend on its own volume; set mode=ha, or leave postgresql disabled." -}}
+{{- end -}}
+{{- $fullName := include "teleport.postgresql.fullname" . -}}
+{{- $labels := include "teleport.componentLabels" (dict "root" . "component" "postgresql") -}}
+{{- $selector := include "teleport.componentSelectorLabels" (dict "root" . "component" "postgresql") -}}
+{{- $auth := .Values.postgresql.auth -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  # Teleport creates its own databases and schema when the role owns them,
+  # but the role itself needs REPLICATION before the change feed can open
+  # a logical replication slot.
+  10-teleport-replication.sh: |
+    #!/bin/sh
+    set -e
+    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      -c "ALTER ROLE \"$POSTGRES_USER\" WITH REPLICATION"
+    echo "granted REPLICATION to $POSTGRES_USER"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.postgresql.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.postgresql.service.type }}
+  ports:
+    - name: postgresql
+      port: {{ .Values.postgresql.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  serviceName: {{ $fullName }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.postgresql.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.postgresql.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "teleport.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: postgresql
+          image: {{ include "teleport.image" (dict "root" . "image" .Values.postgresql.image "defaultTag" .Values.postgresql.image.tag) }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          args:
+            # The change feed reads from a logical replication slot, which
+            # needs wal_level=logical. One slot per Auth replica, plus room
+            # for a slot that has not been cleaned up yet.
+            - -c
+            - wal_level=logical
+            - -c
+            - max_replication_slots={{ add (int .Values.auth.replicaCount) 8 }}
+            - -c
+            - max_wal_senders={{ add (int .Values.auth.replicaCount) 8 }}
+            {{- range .Values.postgresql.extraArgs | default list }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ $auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ $auth.clusterStateDatabase | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "teleport.secretName" . }}
+                  key: postgresPassword
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $auth.username | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ $auth.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          {{- with .Values.postgresql.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: init
+          configMap:
+            name: {{ $fullName }}-init
+            defaultMode: 0555
+        {{- if not .Values.postgresql.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.postgresql.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.postgresql.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- $labels | nindent 10 }}
+        {{- with .Values.postgresql.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.postgresql.persistence.accessModes | nindent 10 }}
+        {{- with .Values.postgresql.persistence.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size | quote }}
+  {{- end }}
+{{- end }}

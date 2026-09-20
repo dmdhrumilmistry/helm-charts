@@ -92,4 +92,51 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/netbird/netbird-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-20T20:04:33.7725438+05:30"
+  teleport:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. Teleport Community Edition with standalone and HA modes.
+        - kind: added
+          description: Standalone mode runs Auth and Proxy in one process on an SQLite backend.
+        - kind: added
+          description: HA mode splits Auth and Proxy across replicas on a PostgreSQL backend.
+        - kind: added
+          description: Kubernetes, application and database access, with the RBAC Kubernetes access requires.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: teleport
+          image: public.ecr.aws/gravitational/teleport-distroless:18.10.0
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Teleport source (AGPL-3.0)
+          url: https://github.com/gravitational/teleport
+        - name: Teleport documentation
+          url: https://goteleport.com/docs/
+    apiVersion: v2
+    appVersion: 18.10.0
+    created: "2026-09-21T00:05:55.145881+05:30"
+    description: Self-hosted Teleport Community Edition — SSH, Kubernetes, application
+      and database access with short-lived certificates. Single-node or HA on PostgreSQL.
+    digest: d9b7191186fa208c76c3f0dacde5c76e047353446f366db125435ede5abd2c23
+    home: https://goteleport.com
+    icon: https://goteleport.com/static/teleport-symbol-bimi.svg
+    keywords:
+    - teleport
+    - ssh
+    - kubernetes
+    - bastion
+    - zero-trust
+    - access-proxy
+    - certificate-authority
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: teleport
+    sources:
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/teleport/teleport-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-09-21T00:05:55.1438428+05:30"

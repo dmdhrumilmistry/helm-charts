@@ -1,0 +1,443 @@
+# =====================================================================
+# Teleport Community Edition
+#
+# A minimal install needs one value:
+#
+#   helm install teleport dmdhrumilmistry/teleport \
+#     --namespace teleport --create-namespace \
+#     --set clusterName=teleport.example.com
+#
+# Point that FQDN at the proxy LoadBalancer, then create the first user:
+#
+#   kubectl exec -n teleport sts/teleport -- \
+#     tctl users add admin --roles=editor,access --logins=root
+#
+# LICENSING: this chart is MIT, but it deploys Teleport, which upstream
+# licenses under AGPL-3.0 from v15 on. Running the published community
+# image unmodified imposes no source-disclosure obligation on you. See
+# the README before you fork or patch Teleport itself.
+# =====================================================================
+
+global:
+  clusterDomain: cluster.local
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# -------------------------------------------------------------------
+# REQUIRED. The public FQDN Teleport is served on. This is both the
+# Teleport cluster name and the address clients connect to. It is baked
+# into the cluster's certificate authorities on first start and cannot
+# be changed afterwards without rebuilding the cluster.
+# -------------------------------------------------------------------
+clusterName: ""
+
+# standalone | ha
+#
+#   standalone  Auth and Proxy in one process, SQLite on a volume, one
+#               replica. Everything works, nothing is redundant.
+#   ha          Auth and Proxy as separate scalable Deployments on a
+#               PostgreSQL backend. Read the PostgreSQL section first:
+#               the backend has real prerequisites.
+mode: standalone
+
+image:
+  registry: ""
+  # Community Edition. The enterprise image is teleport-ent-distroless
+  # and needs a licence file — this chart does not wire that up.
+  repository: public.ecr.aws/gravitational/teleport-distroless
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+commonLabels: {}
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+dataDir: /var/lib/teleport
+
+# Port for Teleport's diagnostics listener, which serves /healthz,
+# /readyz and /metrics. Cluster-internal only; never published.
+diagPort: 3000
+
+log:
+  output: stderr
+  severity: INFO
+  # text | json
+  format: json
+
+# =====================================================================
+# TLS
+#
+# Teleport terminates TLS itself rather than sitting behind an ingress.
+# That is not a preference: in multiplex mode it routes SSH, Kubernetes
+# and database traffic by TLS ALPN, and Kubernetes and database clients
+# authenticate with mTLS. An ingress terminating TLS breaks both.
+# =====================================================================
+tls:
+  # Kubernetes TLS secret holding tls.crt and tls.key — typically from
+  # cert-manager. This is the recommended option.
+  existingSecret: ""
+
+  # Teleport's built-in Let's Encrypt client. Needs the cluster reachable
+  # on port 443 from the internet. Upstream warns against this with more
+  # than one Proxy replica: parallel ACME challenges hit failed-validation
+  # limits and can lock the process up.
+  acme:
+    enabled: false
+    email: ""
+
+  # How often to re-read the certificate files, so cert-manager renewals
+  # are picked up without a restart.
+  reloadInterval: 1h
+
+  # With neither option set, Teleport generates a self-signed certificate.
+  # Fine for a first look with `tsh --insecure`; useless for real clients.
+
+# =====================================================================
+# Authentication
+# =====================================================================
+authentication:
+  # local | github
+  # SAML and OIDC connectors are Enterprise-only and will not work here.
+  type: local
+
+  # Ordered list. An empty list disables second factors entirely, which
+  # is a bad idea for anything reachable from a network.
+  secondFactors:
+    - webauthn
+    - otp
+
+  # best_effort | strict
+  lockingMode: best_effort
+  defaultSessionTTL: 12h
+
+# node | node-sync | proxy | proxy-sync | off
+sessionRecording: node
+
+# Where recorded sessions are written.
+#
+# Left empty, the Auth Service keeps them under dataDir. That is fine in
+# standalone mode, where dataDir is a persistent volume. In ha mode it is
+# not: each Auth replica would keep recordings on its own ephemeral disk,
+# so a playback request reaching the wrong replica finds nothing and a
+# restart loses them. Point this at shared object storage instead.
+#
+#   s3://bucket/path?region=eu-west-1
+#   gs://bucket/path
+#   azblob://container
+auditSessionsURI: ""
+
+# Turn the Teleport pod itself into an SSH target. Almost never wanted:
+# these are control-plane pods, not servers you log into.
+sshService:
+  enabled: false
+
+# =====================================================================
+# Auth Service
+# =====================================================================
+auth:
+  # ha mode only. Each replica holds a PostgreSQL replication slot, so
+  # max_replication_slots must be at least this high.
+  replicaCount: 2
+
+  # pool_max_conns on the cluster-state connection string.
+  postgresPoolMaxConns: 20
+
+  service:
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+
+  # Merged into auth_service last, for keys this chart does not model.
+  extraConfig: {}
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+# =====================================================================
+# Proxy Service
+# =====================================================================
+proxy:
+  # ha mode only; standalone always runs one.
+  replicaCount: 2
+
+  # multiplex | separate
+  #
+  #   multiplex  everything on the public port, routed by TLS ALPN. One
+  #              LoadBalancer, one firewall rule. Strongly preferred.
+  #   separate   distinct ports per protocol (3023 SSH, 3024 tunnel,
+  #              3026 Kubernetes). Only for clients too old for ALPN.
+  listenerMode: multiplex
+
+  # Teleport reads client IPs from X-Forwarded-For. Only enable behind a
+  # proxy you control, or clients can spoof their source address.
+  trustXForwardedFor: false
+
+  service:
+    # LoadBalancer is the default for a reason — see the TLS note above.
+    # NodePort and ClusterIP work if you terminate TLS nowhere else.
+    type: LoadBalancer
+    port: 443
+    annotations: {}
+      # AWS NLB:
+      #   service.beta.kubernetes.io/aws-load-balancer-type: external
+      #   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+      #   service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    loadBalancerIP: ""
+    loadBalancerClass: ""
+    externalTrafficPolicy: ""
+    # Extra ports published when listenerMode is "separate".
+    nodePorts: {}
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+
+  # Merged into proxy_service last.
+  extraConfig: {}
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+# =====================================================================
+# Kubernetes access
+#
+# Lets users run kubectl through Teleport with short-lived certificates
+# and full session recording. Requires impersonation rights, granted by
+# the ClusterRole this chart creates when rbac.create is true.
+# =====================================================================
+kubernetesAccess:
+  enabled: true
+  # Name this cluster appears under in `tsh kube ls`. Defaults to clusterName.
+  clusterName: ""
+  labels: {}
+
+# =====================================================================
+# Application access
+#
+# Each entry becomes an app_service entry. uri is resolved from inside
+# the cluster, so in-cluster Services work directly.
+# =====================================================================
+apps: []
+  # - name: grafana
+  #   uri: http://grafana.monitoring.svc.cluster.local:3000
+  #   labels:
+  #     env: prod
+
+# =====================================================================
+# Database access
+#
+# Each entry becomes a db_service entry.
+# =====================================================================
+databases: []
+  # - name: orders
+  #   protocol: postgres
+  #   uri: postgres.default.svc.cluster.local:5432
+  #   labels:
+  #     env: prod
+
+# ha mode only: run the agent services in their own Deployment rather
+# than inside the control plane.
+agent:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# =====================================================================
+# Persistence (standalone mode)
+#
+# Holds the SQLite backend, the cluster's certificate authorities and
+# recorded sessions. Losing this volume destroys the cluster identity:
+# every issued certificate becomes invalid and every client must re-enrol.
+# =====================================================================
+persistence:
+  enabled: true
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  existingClaim: ""
+  annotations: {}
+
+# =====================================================================
+# PostgreSQL (ha mode)
+#
+# Teleport's PostgreSQL backend is demanding. For cluster state it needs:
+#
+#   - PostgreSQL 13 or later
+#   - the wal2json logical decoding plugin, which the official postgres
+#     image does NOT ship
+#   - wal_level = logical
+#   - max_replication_slots >= auth.replicaCount
+#   - a role with the REPLICATION attribute
+#   - a direct connection; pgbouncer is not supported
+#
+# Managed services that satisfy this include Azure Database for
+# PostgreSQL (wal2json pre-installed) and AWS RDS. Check before assuming.
+# =====================================================================
+
+# In-cluster PostgreSQL. TESTING ONLY — single replica, no backups, no
+# failover. Pointing a highly available control plane at a database with
+# none of its own defeats the exercise. Use externalDatabase in anger.
+postgresql:
+  enabled: false
+
+  image:
+    registry: ""
+    # Chosen because it bundles wal2json, which the stock postgres image
+    # lacks. Debezium is Apache-2.0.
+    repository: debezium/postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+
+  auth:
+    username: teleport
+    clusterStateDatabase: teleport_backend
+    auditDatabase: teleport_audit
+
+  service:
+    type: ClusterIP
+    port: 5432
+    annotations: {}
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+
+  # Extra server flags, appended after the wal_level and replication-slot
+  # settings the Teleport backend requires.
+  extraArgs: []
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+externalDatabase:
+  host: ""
+  port: 5432
+  username: teleport
+  password: ""
+  clusterStateDatabase: teleport_backend
+  # Set to "" to keep the audit log out of PostgreSQL.
+  auditDatabase: teleport_audit
+  sslmode: verify-full
+
+# =====================================================================
+# Secrets
+#
+# Generated on first install, then read back from the cluster on upgrade
+# so re-running helm never rotates them and locks agents out.
+# =====================================================================
+secrets:
+  # Static join token letting Proxy and agent pods register with Auth.
+  # Only used in ha mode.
+  joinToken: ""
+  # Password for the in-cluster PostgreSQL.
+  postgresPassword: ""
+
+existingSecret: ""
+
+# =====================================================================
+# RBAC and service account
+# =====================================================================
+rbac:
+  # Creates the ClusterRole that Kubernetes access needs: impersonating
+  # users, groups and service accounts, reading pods, and creating
+  # self-subject access reviews.
+  create: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+    # AWS IRSA:
+    #   eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/teleport
+    # GKE Workload Identity:
+    #   iam.gke.io/gcp-service-account: teleport@my-project.iam.gserviceaccount.com
+
+podSecurityContext:
+  fsGroup: 9807
+  runAsUser: 9807
+  runAsGroup: 9807
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Merged into every generated teleport.yaml last, after everything else.
+# https://goteleport.com/docs/reference/deployment/config/
+extraConfig: {}
+
+# =====================================================================
+# Tests (helm test)
+# =====================================================================
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: curlimages/curl
+    tag: "8.11.1"
