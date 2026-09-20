@@ -1,0 +1,129 @@
+# =====================================================================
+# Example overrides for Amazon EKS.
+#
+#   helm install netbird dmdhrumilmistry/netbird \
+#     -n netbird --create-namespace \
+#     -f values-aws.yaml \
+#     --set global.domain=netbird.example.com
+#
+# Assumes the EBS CSI driver, the AWS Load Balancer Controller and
+# ingress-nginx (or the ALB controller, see the note below) are installed,
+# plus cert-manager with a ClusterIssuer named letsencrypt-prod.
+# =====================================================================
+
+global:
+  domain: ""
+  tls: true
+
+ingress:
+  enabled: true
+  controller: nginx
+  className: nginx
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+  # Using the AWS Load Balancer Controller instead of ingress-nginx? Set
+  # className: alb, drop the nginx preset by setting controller: other,
+  # and carry the gRPC backend over with:
+  #   grpcAnnotations:
+  #     alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+
+server:
+  # Signal and relay hold per-connection state in memory, so this stays 1.
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+
+  persistence:
+    enabled: true
+    size: 20Gi
+    # gp3 is cheaper and faster than the gp2 default. Create the class with
+    # the EBS CSI driver if you do not have it yet.
+    storageClassName: gp3
+
+  # STUN is UDP, so it needs an NLB. An ALB or a Classic LB will not carry it.
+  stun:
+    service:
+      enabled: true
+      type: LoadBalancer
+      # Preserves the client source address, which is the entire point of
+      # a STUN server.
+      externalTrafficPolicy: Local
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: external
+        service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+        service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+        service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Keep the server off Spot capacity: a reschedule drops every peer
+  # connection it is holding.
+  nodeSelector:
+    karpenter.sh/capacity-type: on-demand
+
+dashboard:
+  # Static assets only, so this scales freely.
+  replicaCount: 2
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: netbird
+          app.kubernetes.io/component: dashboard
+
+# ---------------------------------------------------------------------
+# Database
+#
+# The in-cluster StatefulSet below is fine to start with. For production,
+# switch it off and point externalDatabase at RDS or Aurora PostgreSQL.
+# ---------------------------------------------------------------------
+postgresql:
+  enabled: true
+  persistence:
+    size: 50Gi
+    storageClassName: gp3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+
+# postgresql:
+#   enabled: false
+# externalDatabase:
+#   host: netbird.abcdefghijkl.eu-west-1.rds.amazonaws.com
+#   port: 5432
+#   username: netbird
+#   password: ""          # prefer existingSecret over a literal here
+#   database: netbird
+#   activityDatabase: netbird_activity
+#   idpDatabase: netbird_idp
+#   sslmode: require
+
+serviceAccount:
+  create: true
+  annotations: {}
+    # IRSA, if you give NetBird access to AWS APIs:
+    # eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/netbird

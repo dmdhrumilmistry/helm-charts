@@ -1,0 +1,89 @@
+{{/*
+Renders config.yaml for the combined NetBird server.
+Held in a Secret rather than a ConfigMap: it carries the relay auth
+secret, the store encryption key and the database DSN.
+Schema: https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example
+*/}}
+{{- $c := .Values.server.config -}}
+{{- $usePostgres := eq (include "netbird.postgresql.inUse" .) "true" -}}
+{{- $publicURL := include "netbird.publicURL" . -}}
+
+{{- $server := dict -}}
+{{- $_ := set $server "listenAddress" (printf ":%v" .Values.server.containerPort) -}}
+{{- $_ := set $server "exposedAddress" (include "netbird.exposedAddress" .) -}}
+{{- $_ := set $server "stunPorts" .Values.server.stun.ports -}}
+{{- $_ := set $server "metricsPort" $c.metricsPort -}}
+{{- $_ := set $server "healthcheckAddress" (printf ":%v" $c.healthcheckPort) -}}
+{{- $_ := set $server "logLevel" $c.logLevel -}}
+{{- $_ := set $server "logFile" $c.logFile -}}
+{{- $_ := set $server "authSecret" (include "netbird.gen" (dict "root" . "key" "authSecret")) -}}
+{{- $_ := set $server "dataDir" $c.dataDir -}}
+{{- $_ := set $server "disableAnonymousMetrics" $c.disableAnonymousMetrics -}}
+{{- $_ := set $server "disableGeoliteUpdate" $c.disableGeoliteUpdate -}}
+
+{{/* Embedded identity provider (Dex): local users, plus any SSO provider added later from the dashboard. */}}
+{{- $auth := dict -}}
+{{- $_ := set $auth "issuer" (printf "%s/oauth2" $publicURL) -}}
+{{- $_ := set $auth "localAuthDisabled" $c.auth.localAuthDisabled -}}
+{{- $_ := set $auth "signKeyRefreshEnabled" $c.auth.signKeyRefreshEnabled -}}
+{{- $_ := set $auth "sessionCookieEncryptionKey" (include "netbird.gen" (dict "root" . "key" "sessionCookieEncryptionKey")) -}}
+{{- $_ := set $auth "dashboardRedirectURIs" (list (printf "%s/nb-auth" $publicURL) (printf "%s/nb-silent-auth" $publicURL)) -}}
+{{- $_ := set $auth "cliRedirectURIs" $c.auth.cliRedirectURIs -}}
+{{- if $c.auth.grantTypes -}}
+{{- $_ := set $auth "grantTypes" $c.auth.grantTypes -}}
+{{- end -}}
+{{- if and $c.auth.owner.email $c.auth.owner.password -}}
+{{- $_ := set $auth "owner" (dict "email" $c.auth.owner.email "password" $c.auth.owner.password) -}}
+{{- end -}}
+{{- $_ := set $server "auth" $auth -}}
+
+{{/* Main store. */}}
+{{- $store := dict "encryptionKey" (include "netbird.gen" (dict "root" . "key" "storeEncryptionKey")) -}}
+{{- if $usePostgres -}}
+{{- $_ := set $store "engine" "postgres" -}}
+{{- $_ := set $store "dsn" (include "netbird.postgresql.dsn" (dict "root" . "database" (include "netbird.postgresql.database" .))) -}}
+{{- else -}}
+{{- $_ := set $store "engine" "sqlite" -}}
+{{- end -}}
+{{- $_ := set $server "store" $store -}}
+
+{{/* Activity (audit) store and embedded-IdP store. Separate databases on the same server. */}}
+{{- if $usePostgres -}}
+{{- $activityDb := ternary .Values.postgresql.auth.activityDatabase .Values.externalDatabase.activityDatabase .Values.postgresql.enabled -}}
+{{- $idpDb := ternary .Values.postgresql.auth.idpDatabase .Values.externalDatabase.idpDatabase .Values.postgresql.enabled -}}
+{{- if $activityDb -}}
+{{- $_ := set $server "activityStore" (dict "engine" "postgres" "dsn" (include "netbird.postgresql.dsn" (dict "root" . "database" $activityDb))) -}}
+{{- end -}}
+{{- if $idpDb -}}
+{{- $_ := set $server "authStore" (dict "engine" "postgres" "dsn" (include "netbird.postgresql.dsn" (dict "root" . "database" $idpDb))) -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Client IPs arrive via the ingress controller. */}}
+{{- $rp := dict -}}
+{{- if $c.reverseProxy.trustedHTTPProxies -}}
+{{- $_ := set $rp "trustedHTTPProxies" $c.reverseProxy.trustedHTTPProxies -}}
+{{- else if $c.reverseProxy.trustedHTTPProxiesCount -}}
+{{- $_ := set $rp "trustedHTTPProxiesCount" $c.reverseProxy.trustedHTTPProxiesCount -}}
+{{- end -}}
+{{- if $c.reverseProxy.trustedPeers -}}
+{{- $_ := set $rp "trustedPeers" $c.reverseProxy.trustedPeers -}}
+{{- end -}}
+{{- if $rp -}}
+{{- $_ := set $server "reverseProxy" $rp -}}
+{{- end -}}
+
+{{/* Operator escape hatch, applied last. */}}
+{{- $server = mergeOverwrite $server (deepCopy ($c.extraConfig | default dict)) -}}
+{{- $config := dict "server" $server -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "netbird.server.configSecretName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "netbird.componentLabels" (dict "root" . "component" "server") | nindent 4 }}
+type: Opaque
+stringData:
+  config.yaml: |
+    {{- toYaml $config | nindent 4 }}

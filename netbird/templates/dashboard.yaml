@@ -1,82 +1,149 @@
 {{- if .Values.dashboard.enabled }}
+{{- $fullName := include "netbird.dashboard.fullname" . -}}
+{{- $labels := include "netbird.componentLabels" (dict "root" . "component" "dashboard") -}}
+{{- $selector := include "netbird.componentSelectorLabels" (dict "root" . "component" "dashboard") -}}
+{{- $publicURL := include "netbird.publicURL" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  # Browsers call these directly, so they must be the public URL rather
+  # than an in-cluster Service name.
+  NETBIRD_MGMT_API_ENDPOINT: {{ $publicURL | quote }}
+  NETBIRD_MGMT_GRPC_API_ENDPOINT: {{ $publicURL | quote }}
+  # OIDC against the server's embedded identity provider.
+  AUTH_AUTHORITY: {{ printf "%s/oauth2" $publicURL | quote }}
+  AUTH_CLIENT_ID: {{ .Values.dashboard.config.authClientId | quote }}
+  AUTH_AUDIENCE: {{ .Values.dashboard.config.authAudience | quote }}
+  AUTH_CLIENT_SECRET: {{ .Values.dashboard.config.authClientSecret | quote }}
+  AUTH_SUPPORTED_SCOPES: {{ .Values.dashboard.config.authSupportedScopes | quote }}
+  AUTH_REDIRECT_URI: "/nb-auth"
+  AUTH_SILENT_REDIRECT_URI: "/nb-silent-auth"
+  USE_AUTH0: {{ .Values.dashboard.config.useAuth0 | quote }}
+  # TLS is terminated by the ingress controller, so the bundled nginx
+  # serves plain HTTP and must not try to obtain its own certificate.
+  NGINX_SSL_PORT: "443"
+  LETSENCRYPT_DOMAIN: "none"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "netbird.fullname" . }}-dashboard
+  name: {{ $fullName }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "netbird.labels" . | nindent 4 }}
-    app.kubernetes.io/component: dashboard
+    {{- $labels | nindent 4 }}
 spec:
-  replicas: {{ .Values.dashboard.replicas }}
+  {{- if not .Values.dashboard.autoscaling.enabled }}
+  replicas: {{ .Values.dashboard.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
-      {{- include "netbird.dashboard.selectorLabels" . | nindent 6 }}
+      {{- $selector | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "netbird.dashboard.selectorLabels" . | nindent 8 }}
+        {{- $selector | nindent 8 }}
+        {{- with .Values.dashboard.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ printf "%s|%s" $publicURL (toYaml .Values.dashboard.config) | sha256sum }}
+        {{- with .Values.dashboard.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
+      {{- include "netbird.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "netbird.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.dashboard.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.dashboard.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: dashboard
-          image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
+          image: {{ include "netbird.image" (dict "root" . "image" .Values.dashboard.image "defaultTag" .Values.dashboard.image.tag) }}
           imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
           ports:
-            - containerPort: 80
-            - containerPort: 443
+            - name: http
+              containerPort: 80
+              protocol: TCP
           envFrom:
-            - secretRef:
-                name: {{ include "netbird.secretName" . }}
+            - configMapRef:
+                name: {{ $fullName }}
+          {{- with .Values.dashboard.extraEnv }}
           env:
-            - name: NETBIRD_MGMT_API_ENDPOINT
-              value: "https://{{ .Values.global.domain }}:{{ .Values.management.service.port }}"
-            - name: NETBIRD_MGMT_GRPC_API_ENDPOINT
-              value: "https://{{ .Values.global.domain }}:{{ .Values.management.grpcService.port }}"
-            - name: AUTH_AUTHORITY
-              value: {{ .Values.dashboard.config.authAuthority | quote }}
-            - name: USE_AUTH0
-              value: {{ .Values.dashboard.config.useAuth0 | quote }}
-            - name: AUTH_SUPPORTED_SCOPES
-              value: {{ .Values.dashboard.config.authSupportedScopes | quote }}
-            - name: AUTH_REDIRECT_URI
-              value: {{ .Values.dashboard.config.authRedirectUri | quote }}
-            - name: AUTH_SILENT_REDIRECT_URI
-              value: {{ .Values.dashboard.config.authSilentRedirectUri | quote }}
-            - name: NETBIRD_TOKEN_SOURCE
-              value: {{ .Values.dashboard.config.netbirdTokenSource | quote }}
-            - name: NGINX_SSL_PORT
-              value: {{ .Values.dashboard.config.nginxSslPort | quote }}
-            - name: LETSENCRYPT_DOMAIN
-              value: {{ .Values.global.domain | quote }}
-          {{- if .Values.dashboard.letsencryptPersistence.enabled }}
-          volumeMounts:
-            - name: netbird-letsencrypt
-              mountPath: /etc/letsencrypt
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- if .Values.dashboard.letsencryptPersistence.enabled }}
-      volumes:
-        - name: netbird-letsencrypt
-          persistentVolumeClaim:
-            claimName: {{ include "netbird.fullname" . }}-letsencrypt-pvc
+          {{- if .Values.dashboard.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.dashboard.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dashboard.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.dashboard.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.dashboard.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.dashboard.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.dashboard.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dashboard.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.dashboard.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.dashboard.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- with .Values.dashboard.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.dashboard.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.dashboard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "netbird.fullname" . }}-dashboard
+  name: {{ $fullName }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "netbird.labels" . | nindent 4 }}
-    app.kubernetes.io/component: dashboard
+    {{- $labels | nindent 4 }}
+  {{- with .Values.dashboard.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.dashboard.service.type }}
   ports:
     - name: http
-      port: {{ .Values.dashboard.service.http.port }}
-      targetPort: {{ .Values.dashboard.service.http.targetPort }}
-    - name: https
-      port: {{ .Values.dashboard.service.https.port }}
-      targetPort: {{ .Values.dashboard.service.https.targetPort }}
+      port: {{ .Values.dashboard.service.port }}
+      targetPort: http
+      protocol: TCP
   selector:
-    {{- include "netbird.dashboard.selectorLabels" . | nindent 4 }}
+    {{- $selector | nindent 4 }}
 {{- end }}

@@ -67,3 +67,5 @@ $RECYCLE.BIN/
 
 # secret values
 netbird-secret.yaml
+.env
+secrets.env

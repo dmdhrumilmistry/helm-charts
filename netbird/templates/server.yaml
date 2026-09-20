@@ -1,0 +1,308 @@
+{{- $fullName := include "netbird.server.fullname" . -}}
+{{- $labels := include "netbird.componentLabels" (dict "root" . "component" "server") -}}
+{{- $selector := include "netbird.componentSelectorLabels" (dict "root" . "component" "server") -}}
+{{- $usePostgres := eq (include "netbird.postgresql.inUse" .) "true" -}}
+{{- $persist := and .Values.server.persistence.enabled (not .Values.server.persistence.existingClaim) -}}
+{{- if and (not $usePostgres) (not .Values.server.persistence.enabled) -}}
+{{- fail "server.persistence.enabled must be true when no PostgreSQL is configured: the SQLite store would be lost on every restart." -}}
+{{- end -}}
+{{- if and .Values.server.autoscaling.enabled (gt (int .Values.server.autoscaling.minReplicas) 1) -}}
+{{- fail "server.autoscaling.minReplicas must be 1: NetBird's open-source signal and relay keep per-connection state in memory and cannot be load balanced across replicas." -}}
+{{- end -}}
+{{- if $persist }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.server.persistence.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.server.persistence.accessModes | nindent 4 }}
+  {{- with .Values.server.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  {{- if not .Values.server.autoscaling.enabled }}
+  replicas: {{ .Values.server.replicaCount }}
+  {{- end }}
+  # The data directory is ReadWriteOnce and signal keeps peer streams in
+  # memory, so never run two versions side by side.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.server.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/server-config.yaml") . | sha256sum }}
+        {{- with .Values.server.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "netbird.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "netbird.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      {{- with .Values.server.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.server.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $usePostgres }}
+      initContainers:
+        # NetBird creates its own schema but not the databases themselves,
+        # and it exits rather than retries if the server is not up yet.
+        - name: wait-for-postgres
+          image: {{ include "netbird.image" (dict "root" . "image" .Values.postgresql.image "defaultTag" .Values.postgresql.image.tag) }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+                echo "waiting for postgres at $PGHOST:$PGPORT ..."
+                sleep 2
+              done
+          env:
+            - name: PGHOST
+              value: {{ include "netbird.postgresql.host" . | quote }}
+            - name: PGPORT
+              value: {{ include "netbird.postgresql.port" . | quote }}
+            - name: PGUSER
+              value: {{ include "netbird.postgresql.username" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "netbird.postgresql.database" . | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 999
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      {{- end }}
+      containers:
+        - name: netbird-server
+          image: {{ include "netbird.image" (dict "root" . "image" .Values.server.image "defaultTag" .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          args:
+            - --config
+            - /etc/netbird/config.yaml
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.containerPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.server.config.metricsPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.server.config.healthcheckPort }}
+              protocol: TCP
+            {{- range $i, $port := .Values.server.stun.ports }}
+            - name: {{ printf "stun-%d" $i }}
+              containerPort: {{ $port }}
+              protocol: UDP
+              {{- if $.Values.server.stun.hostPort.enabled }}
+              hostPort: {{ $port }}
+              {{- end }}
+            {{- end }}
+          {{- if .Values.server.startupProbe.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.server.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.server.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.server.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.server.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.server.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.server.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.server.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- with .Values.server.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/netbird
+              readOnly: true
+            - name: data
+              mountPath: {{ .Values.server.config.dataDir }}
+            {{- with .Values.server.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.server.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.server.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "netbird.server.configSecretName" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: data
+          {{- if .Values.server.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.server.persistence.existingClaim }}
+          {{- else if .Values.server.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.server.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.server.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.server.service.port }}
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.server.config.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+---
+{{/*
+Same pods, separate Service: Traefik reads the backend scheme off the
+Service, so gRPC needs its own object to be switched to h2c without
+affecting plain HTTP.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-grpc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- $grpcAnn := include "netbird.server.grpcServiceAnnotations" . }}
+  {{- if $grpcAnn }}
+  annotations:
+    {{- $grpcAnn | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.grpcService.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.server.grpcService.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+{{- if and .Values.server.stun.service.enabled .Values.server.stun.ports }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-stun
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.server.stun.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.stun.service.type }}
+  {{- with .Values.server.stun.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.server.stun.service.loadBalancerClass }}
+  loadBalancerClass: {{ . | quote }}
+  {{- end }}
+  {{- if and (eq .Values.server.stun.service.type "LoadBalancer") .Values.server.stun.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.server.stun.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    {{- range $i, $port := .Values.server.stun.ports }}
+    - name: {{ printf "stun-%d" $i }}
+      port: {{ $port }}
+      targetPort: {{ printf "stun-%d" $i }}
+      protocol: UDP
+    {{- end }}
+  selector:
+    {{- $selector | nindent 4 }}
+{{- end }}

@@ -1,0 +1,22 @@
+{{- range $component, $cfg := (dict "dashboard" .Values.dashboard "server" .Values.server) }}
+{{- if and $cfg.podDisruptionBudget.enabled (or (ne $component "dashboard") $.Values.dashboard.enabled) }}
+{{- $name := ternary (include "netbird.dashboard.fullname" $) (include "netbird.server.fullname" $) (eq $component "dashboard") }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "netbird.componentLabels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  {{- if $cfg.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ $cfg.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ $cfg.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "netbird.componentSelectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

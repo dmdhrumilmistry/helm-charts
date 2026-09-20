@@ -1,0 +1,90 @@
+NetBird {{ .Chart.AppVersion }} has been installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Public address: {{ include "netbird.publicURL" . }}
+
+1. Point DNS at your cluster
+{{ if .Values.ingress.enabled }}
+   Create an A/AAAA record for {{ include "netbird.domain" . }} pointing at your
+   ingress controller. Watch for the address to appear:
+
+     kubectl get ingress -n {{ .Release.Namespace }} {{ include "netbird.fullname" . }} -w
+{{- else }}
+   Ingress is disabled. Expose these Services yourself, terminating TLS:
+
+     {{ include "netbird.server.fullname" . }}       HTTP, REST API, OAuth2, relay
+     {{ include "netbird.server.fullname" . }}-grpc  gRPC over h2c (management + signal)
+{{- if .Values.dashboard.enabled }}
+     {{ include "netbird.dashboard.fullname" . }}    web UI
+{{- end }}
+{{- end }}
+{{- if .Values.server.stun.ports }}
+
+   STUN needs UDP {{ join ", " .Values.server.stun.ports }} reachable at the SAME
+   hostname. Check where it landed:
+{{- if .Values.server.stun.service.enabled }}
+
+     kubectl get svc -n {{ .Release.Namespace }} {{ include "netbird.server.fullname" . }}-stun
+
+   If that address differs from your ingress address, add it as a second
+   A record for {{ include "netbird.domain" . }}.
+{{- else if .Values.server.stun.hostPort.enabled }}
+
+   Bound to the node IPs via hostPort. {{ include "netbird.domain" . }} must resolve
+   to a node that runs the server pod.
+{{- else }}
+
+   Neither a STUN Service nor hostPort is enabled, so peers behind NAT will
+   fall back to the relay. Set server.stun.service.enabled or
+   server.stun.hostPort.enabled to fix this.
+{{- end }}
+{{- end }}
+
+2. Create the first admin
+{{ if and .Values.server.config.auth.owner.email .Values.server.config.auth.owner.password }}
+   Already bootstrapped from server.config.auth.owner:
+   {{ .Values.server.config.auth.owner.email }}
+{{- else }}
+   Browse to {{ include "netbird.publicURL" . }} . You will be redirected to
+   /setup to create the first account. That page closes itself once a user
+   exists.
+{{- end }}
+
+   Extra SSO providers (Google, Microsoft, Okta, ...) are added afterwards
+   from the dashboard under Settings -> Identity Providers. No chart values
+   or restarts involved.
+
+3. Back up the encryption key
+{{ if .Values.existingSecret }}
+   You supplied "{{ .Values.existingSecret }}". Keep it safe.
+{{- else }}
+   storeEncryptionKey protects setup keys and API tokens at rest, and the
+   chart generates it once. Losing it means losing access to that data, and
+   `helm uninstall` deletes it. Save a copy now:
+
+     kubectl get secret -n {{ .Release.Namespace }} {{ include "netbird.secretName" . }} -o yaml > netbird-secrets.yaml
+{{- end }}
+
+4. Check it over
+
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+     kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=server --tail=50
+
+{{- if not (eq (include "netbird.postgresql.inUse" .) "true") }}
+
+WARNING: no database configured, so NetBird is using SQLite on a
+ReadWriteOnce volume. Fine for a small deployment; set postgresql.enabled
+or externalDatabase.host before growing past one node.
+{{- end }}
+{{- if not .Values.global.tls }}
+
+WARNING: global.tls is false. Peers and the embedded IdP expect a trusted
+HTTPS endpoint; plain HTTP is for local testing only.
+{{- end }}
+{{- if and .Values.ingress.enabled (eq .Values.ingress.controller "other") }}
+
+NOTE: ingress.controller is "other", so no gRPC backend annotations were
+added. The management and signal gRPC services need an HTTP/2-cleartext
+backend, otherwise peers will connect to the API but never come up. Add
+the annotation your controller uses to ingress.grpcAnnotations, or to
+server.grpcService.annotations if it configures that on the Service.
+{{- end }}
