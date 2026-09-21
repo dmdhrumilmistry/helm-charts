@@ -1,0 +1,85 @@
+Wazuh {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+  indexer    {{ .Values.indexer.replicaCount }} replica(s), {{ .Values.indexer.heapSize }} heap
+  manager    1 master{{ if gt (int .Values.manager.worker.replicaCount) 0 }}, {{ .Values.manager.worker.replicaCount }} worker(s){{ else }} (no cluster){{ end }}
+{{- if .Values.dashboard.enabled }}
+  dashboard  {{ .Values.dashboard.replicaCount }} replica(s)
+{{- end }}
+
+1. Read the generated credentials
+
+   Nothing was printed to your terminal and nothing is in your values file.
+
+     kubectl get secret -n {{ .Release.Namespace }} {{ include "wazuh.secretName" . }} \
+       -o go-template='{{ "{{" }}range $k,$v := .data{{ "}}" }}{{ "{{" }}$k{{ "}}" }}={{ "{{" }}$v|base64decode{{ "}}" }}{{ "{{" }}"\n"{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
+
+{{- if .Values.dashboard.enabled }}
+
+2. Open the dashboard
+
+   Log in as {{ .Values.usernames.indexer }} with the indexerPassword above.
+{{- if .Values.ingress.enabled }}
+
+   https://{{ .Values.ingress.host | default "your-host" }}
+{{- else }}
+
+     kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "wazuh.dashboard.fullname" . }} 5601:{{ .Values.dashboard.service.port }}
+
+   Then https://localhost:5601 — the certificate is from the chart's own
+   CA, so your browser will warn.
+{{- end }}
+{{- end }}
+
+3. Enrol an agent
+
+   Agents register against the master and then send events.
+
+     registration  {{ include "wazuh.master.fullname" . }}:{{ .Values.manager.master.service.registrationPort }}
+{{- if gt (int .Values.manager.worker.replicaCount) 0 }}
+     events        {{ include "wazuh.worker.fullname" . }}:{{ .Values.manager.worker.service.agentPort }}
+{{- else }}
+     events        {{ include "wazuh.master.fullname" . }}:1514
+{{- end }}
+
+   Agents outside the cluster need those Services published — set
+   manager.master.service.type and manager.worker.service.type to
+   LoadBalancer. They are ClusterIP by default, so nothing is exposed
+   until you ask for it.
+
+   The registration password is authdPass from the Secret above.
+
+4. Back up the CA and credentials
+
+   The chart generates an internal PKI on first install and preserves it
+   on upgrade. Losing it while keeping the indexer volume locks the
+   cluster out of its own data, so the Secret is annotated to survive
+   `helm uninstall`. Keep a copy anyway:
+
+     kubectl get secret -n {{ .Release.Namespace }} {{ include "wazuh.certsSecretName" . }} {{ include "wazuh.secretName" . }} -o yaml > wazuh-secrets.yaml
+
+5. Check it over
+
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+     kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/part-of=wazuh --tail=50
+
+{{- if eq (int .Values.indexer.replicaCount) 1 }}
+
+NOTE: one indexer replica cannot host replica shards, so indices report
+yellow rather than green once data arrives. That is expected on a single
+node, not a fault. Raise indexer.replicaCount to 3 for real redundancy.
+{{- end }}
+{{- if not .Values.indexer.sysctlInitContainer.enabled }}
+
+NOTE: the sysctl init container is disabled. The indexer will not start
+unless vm.max_map_count is already at least 262144 on every node it can
+land on.
+{{- end }}
+{{- if gt (int .Values.manager.worker.replicaCount) 0 }}
+
+NOTE: you supplied manager.config. The container replaces the image's
+ossec.conf with it wholesale rather than merging, so anything you left
+out is gone — including rule and decoder includes.
+{{- end }}
+
+LICENSING: this chart is MIT. Wazuh is GPL-2.0, which has no network
+clause, so running it unmodified imposes nothing on you.

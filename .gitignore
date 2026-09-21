@@ -69,3 +69,6 @@ $RECYCLE.BIN/
 netbird-secret.yaml
 .env
 secrets.env
+
+# Vendored helm dependencies; regenerate with `helm dependency build`
+falco/charts/

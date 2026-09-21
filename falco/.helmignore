@@ -1,0 +1,27 @@
+# Patterns to ignore when building packages.
+.DS_Store
+# Common VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# Various IDEs
+.project
+.idea/
+*.tmproj
+.vscode/
+# No *.tgz rule here on purpose: it would also exclude the vendored
+# dependency under charts/, and helm's ignore matcher does not honour
+# leading-slash anchoring the way gitignore does. Package into a temp
+# directory and move the result in, so a stale tarball is never bundled.
+# Example value files are documentation, not chart defaults
+ci/

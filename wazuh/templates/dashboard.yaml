@@ -1,0 +1,225 @@
+{{- if .Values.dashboard.enabled }}
+{{- $fullName := include "wazuh.dashboard.fullname" . -}}
+{{- $labels := include "wazuh.componentLabels" (dict "root" . "component" "dashboard") -}}
+{{- $selector := include "wazuh.componentSelectorLabels" (dict "root" . "component" "dashboard") -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.dashboard.replicaCount }}
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.dashboard.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+        {{- with .Values.dashboard.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "wazuh.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "wazuh.serviceAccountName" . }}
+      {{- with .Values.dashboard.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      containers:
+        - name: wazuh-dashboard
+          image: {{ include "wazuh.image" (dict "root" . "image" .Values.dashboard.image) }}
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          ports:
+            - name: https
+              containerPort: 5601
+              protocol: TCP
+          env:
+            - name: INDEXER_URL
+              value: {{ include "wazuh.indexer.url" . | quote }}
+            - name: INDEXER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: indexerUsername
+            - name: INDEXER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: indexerPassword
+            - name: DASHBOARD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: dashboardUsername
+            - name: DASHBOARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: dashboardPassword
+            # The dashboard queries the manager's REST API for agent state.
+            - name: WAZUH_API_URL
+              value: {{ printf "https://%s" (include "wazuh.master.fullname" .) | quote }}
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: apiUsername
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" . }}
+                  key: apiPassword
+            - name: SERVER_SSL_ENABLED
+              value: "true"
+            - name: SERVER_SSL_CERTIFICATE
+              value: /usr/share/wazuh-dashboard/certs/cert.pem
+            - name: SERVER_SSL_KEY
+              value: /usr/share/wazuh-dashboard/certs/key.pem
+          startupProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket:
+              port: https
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: https
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/wazuh-dashboard/config/opensearch_dashboards.yml
+              subPath: opensearch_dashboards.yml
+              readOnly: true
+            - name: certs
+              mountPath: /usr/share/wazuh-dashboard/certs/cert.pem
+              subPath: dashboard.pem
+              readOnly: true
+            - name: certs
+              mountPath: /usr/share/wazuh-dashboard/certs/key.pem
+              subPath: dashboard-key.pem
+              readOnly: true
+            - name: certs
+              mountPath: /usr/share/wazuh-dashboard/certs/root-ca.pem
+              subPath: root-ca.pem
+              readOnly: true
+          {{- with .Values.dashboard.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullName }}-config
+        - name: certs
+          secret:
+            secretName: {{ include "wazuh.certsSecretName" . }}
+            defaultMode: 0400
+      {{- with .Values.dashboard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- $svcAnn := deepCopy .Values.dashboard.service.annotations }}
+  {{- if and .Values.ingress.enabled (eq .Values.ingress.controller "traefik") }}
+  {{- /* Traefik reads the backend scheme off the Service, not the Ingress. */}}
+  {{- $_ := set $svcAnn "traefik.ingress.kubernetes.io/service.serversscheme" "https" }}
+  {{- end }}
+  {{- if $svcAnn }}
+  annotations:
+    {{- toYaml $svcAnn | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.dashboard.service.type }}
+  {{- with .Values.dashboard.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  ports:
+    - name: https
+      port: {{ .Values.dashboard.service.port }}
+      targetPort: https
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+{{- if .Values.ingress.enabled }}
+---
+{{- $host := .Values.ingress.host | default (printf "wazuh.%s" "example.com") -}}
+{{- $ann := deepCopy .Values.ingress.annotations -}}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.clusterIssuer -}}
+{{- $_ := set $ann "cert-manager.io/cluster-issuer" .Values.ingress.tls.clusterIssuer -}}
+{{- end -}}
+{{/*
+The dashboard serves HTTPS with its own certificate, so the controller has
+to speak HTTPS to the backend rather than plain HTTP.
+*/}}
+{{- if eq .Values.ingress.controller "nginx" -}}
+{{- $_ := set $ann "nginx.ingress.kubernetes.io/backend-protocol" "HTTPS" -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- if $ann }}
+  annotations:
+    {{- toYaml $ann | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" $fullName) }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  name: https
+{{- end }}
+{{- end }}

@@ -1,0 +1,104 @@
+# =====================================================================
+# Falco — runtime security for Kubernetes
+#
+#   helm install falco dmdhrumilmistry/falco \
+#     --namespace falco --create-namespace
+#
+# This wraps the official falcosecurity/falco chart rather than replacing
+# it. Everything under the `falco:` key below is passed straight through,
+# so the full upstream value set is available:
+#
+#   helm show values falcosecurity/falco --version 9.2.0
+#
+# LICENSING: this wrapper is MIT; Falco and the upstream chart are
+# Apache-2.0. Nothing here restricts commercial or internal use.
+# =====================================================================
+
+# =====================================================================
+# Passed through to the upstream chart verbatim.
+# =====================================================================
+falco:
+  driver:
+    enabled: true
+    # modern_ebpf uses a CO-RE probe: no kernel headers, no compilation,
+    # no privileged driver-loader. Needs kernel 5.8 or newer, which any
+    # currently supported distribution has.
+    #
+    # Fall back to `ebpf` on older kernels, or `module` where eBPF is
+    # unavailable — both pull in the driver-loader init container.
+    kind: modern_ebpf
+
+  collectors:
+    enabled: true
+    # Enriches every event with pod, namespace and image metadata. Without
+    # it alerts identify a container id and little else.
+    kubernetes:
+      enabled: true
+
+  # Extra rules, as a filename -> rule-body map. The upstream chart turns
+  # each entry into a ConfigMap and mounts it after its own rule files, so
+  # a rule defined here overrides an upstream rule of the same name.
+  #
+  # Left empty deliberately: Falco's bundled rules are curated and
+  # versioned, and quietly layering custom rules on top makes it unclear
+  # which rule fired and whether an upgrade changed it. Add yours here.
+  # https://falco.org/docs/rules/
+  customRules: {}
+    # rules-local.yaml: |-
+    #   - rule: Shell spawned in container
+    #     desc: An interactive shell started inside a container.
+    #     condition: >
+    #       spawned_process and container and shell_procs and proc.tty != 0
+    #     output: >
+    #       Shell opened in a container (user=%user.name
+    #       container=%container.name image=%container.image.repository
+    #       pod=%k8s.pod.name ns=%k8s.ns.name command=%proc.cmdline)
+    #     priority: NOTICE
+    #     tags: [container, shell]
+
+  # Falco's own metrics, for Prometheus.
+  metrics:
+    enabled: true
+    interval: 1h
+    outputRule: true
+
+  falco:
+    # JSON output, so a log pipeline can parse alerts rather than scraping
+    # free text.
+    json_output: true
+    json_include_output_property: true
+    log_level: info
+    # Rules are evaluated against syscalls at high volume; dropping to the
+    # syslog-style buffered output loses alerts under load.
+    buffered_outputs: false
+    priority: notice
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+  # Falco reads syscalls on every node, including control-plane ones.
+  tolerations:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/control-plane
+      operator: Exists
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+      operator: Exists
+
+  # ---------------------------------------------------------------
+  # Falcosidekick fans alerts out to Slack, webhooks, S3 and so on, and
+  # ships a small web UI. Off by default: it is a second workload plus a
+  # Redis instance, and it is useless until an output is configured.
+  # ---------------------------------------------------------------
+  falcosidekick:
+    enabled: false
+    webui:
+      enabled: false
+    # config:
+    #   slack:
+    #     webhookurl: ""
+    #     minimumpriority: warning

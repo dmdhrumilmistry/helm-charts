@@ -1,0 +1,267 @@
+{{- $fullName := include "wazuh.fullname" . -}}
+{{- $clusterSvc := include "wazuh.cluster.fullname" . -}}
+{{- if and (gt (int .Values.manager.worker.replicaCount) 0) (not .Values.manager.config) -}}
+{{- fail "manager.worker.replicaCount above 0 needs manager.config: clustering requires a <cluster> stanza, and the container replaces the image's ossec.conf with whatever is mounted rather than merging into it. Set manager.config to a full ossec.conf, or leave workers at 0 for a single manager." -}}
+{{- end -}}
+{{/*
+Headless Service carrying the per-pod DNS names Wazuh cluster members use
+to find each other.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $clusterSvc }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wazuh.componentLabels" (dict "root" . "component" "manager") | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: cluster
+      port: 1516
+      targetPort: cluster
+      protocol: TCP
+  selector:
+    {{- include "wazuh.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: manager
+{{- range $role := (list "master" "worker") }}
+{{- $cfg := index $.Values.manager $role }}
+{{- if or (eq $role "master") (gt (int $cfg.replicaCount) 0) }}
+{{- $name := ternary (include "wazuh.master.fullname" $) (include "wazuh.worker.fullname" $) (eq $role "master") }}
+{{- $labels := include "wazuh.componentLabels" (dict "root" $ "component" "manager") }}
+{{- $selector := include "wazuh.componentSelectorLabels" (dict "root" $ "component" "manager") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    wazuh.node-type: {{ $role }}
+  {{- with $cfg.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $cfg.service.type }}
+  {{- with $cfg.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  {{- if and (eq $cfg.service.type "LoadBalancer") $cfg.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ $cfg.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    {{- if eq $role "master" }}
+    - name: registration
+      port: {{ $cfg.service.registrationPort }}
+      targetPort: registration
+      protocol: TCP
+    - name: api
+      port: {{ $cfg.service.apiPort }}
+      targetPort: api
+      protocol: TCP
+    {{- else }}
+    - name: agent
+      port: {{ $cfg.service.agentPort }}
+      targetPort: agent
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- $selector | nindent 4 }}
+    wazuh.node-type: {{ $role }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    wazuh.node-type: {{ $role }}
+spec:
+  serviceName: {{ $clusterSvc }}
+  replicas: {{ ternary 1 (int $cfg.replicaCount) (eq $role "master") }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+      wazuh.node-type: {{ $role }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        wazuh.node-type: {{ $role }}
+        {{- with $cfg.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ printf "%s|%s" ($.Values.manager.config | toString) ($.Values.manager.workerConfig | toString) | sha256sum }}
+        {{- with $cfg.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "wazuh.imagePullSecrets" $ | nindent 6 }}
+      serviceAccountName: {{ include "wazuh.serviceAccountName" $ }}
+      securityContext:
+        fsGroup: 101
+      {{- with $cfg.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      containers:
+        - name: wazuh-manager
+          image: {{ include "wazuh.image" (dict "root" $ "image" $.Values.manager.image) }}
+          imagePullPolicy: {{ $.Values.manager.image.pullPolicy }}
+          securityContext:
+            capabilities:
+              # Wazuh runs several daemons chrooted into /var/ossec.
+              add: ["SYS_CHROOT"]
+          ports:
+            {{- if eq $role "master" }}
+            - name: registration
+              containerPort: 1515
+              protocol: TCP
+            - name: api
+              containerPort: 55000
+              protocol: TCP
+            {{- else }}
+            - name: agent
+              containerPort: 1514
+              protocol: TCP
+            {{- end }}
+            - name: cluster
+              containerPort: 1516
+              protocol: TCP
+          env:
+            - name: INDEXER_URL
+              value: {{ include "wazuh.indexer.url" $ | quote }}
+            - name: INDEXER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" $ }}
+                  key: indexerUsername
+            - name: INDEXER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" $ }}
+                  key: indexerPassword
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" $ }}
+                  key: apiUsername
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" $ }}
+                  key: apiPassword
+            # Substituted into to_be_replaced_by_cluster_key in a
+            # user-supplied ossec.conf by the image entrypoint.
+            - name: WAZUH_CLUSTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.secretName" $ }}
+                  key: clusterKey
+            - name: FILEBEAT_SSL_VERIFICATION_MODE
+              value: "full"
+            - name: SSL_CERTIFICATE_AUTHORITIES
+              value: /etc/ssl/root-ca.pem
+            - name: SSL_CERTIFICATE
+              value: /etc/ssl/filebeat.pem
+            - name: SSL_KEY
+              value: /etc/ssl/filebeat.key
+          volumeMounts:
+            {{- if $.Values.manager.config }}
+            - name: manager-config
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: {{ $role }}.conf
+              readOnly: true
+            {{- end }}
+            - name: authd-pass
+              mountPath: /wazuh-config-mount/etc/authd.pass
+              subPath: authd.pass
+              readOnly: true
+            - name: certs
+              mountPath: /etc/ssl/root-ca.pem
+              subPath: root-ca.pem
+              readOnly: true
+            - name: certs
+              mountPath: /etc/ssl/filebeat.pem
+              subPath: filebeat.pem
+              readOnly: true
+            - name: certs
+              mountPath: /etc/ssl/filebeat.key
+              subPath: filebeat-key.pem
+              readOnly: true
+            {{- /*
+            Wazuh scatters state across several directories under
+            /var/ossec, plus filebeat's own. Each is a subPath of the one
+            volume so a restart keeps agents, keys and queued events.
+            */}}
+            {{- range $sp := list "var/ossec/api/configuration" "var/ossec/etc" "var/ossec/logs" "var/ossec/queue" "var/ossec/var/multigroups" "var/ossec/integrations" "var/ossec/active-response/bin" "var/ossec/agentless" "var/ossec/wodles" }}
+            - name: data
+              mountPath: {{ printf "/%s" $sp }}
+              subPath: {{ printf "wazuh/%s" $sp }}
+            {{- end }}
+            - name: data
+              mountPath: /etc/filebeat
+              subPath: filebeat/etc/filebeat
+            - name: data
+              mountPath: /var/lib/filebeat
+              subPath: filebeat/var/lib/filebeat
+          {{- with $cfg.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        {{- if $.Values.manager.config }}
+        - name: manager-config
+          configMap:
+            name: {{ $fullName }}-manager-config
+        {{- end }}
+        - name: authd-pass
+          secret:
+            secretName: {{ include "wazuh.secretName" $ }}
+            items:
+              - key: authdPass
+                path: authd.pass
+        - name: certs
+          secret:
+            secretName: {{ include "wazuh.certsSecretName" $ }}
+            defaultMode: 0400
+        {{- if not $cfg.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+      {{- with $cfg.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $cfg.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $cfg.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if $cfg.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- $labels | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml $cfg.persistence.accessModes | nindent 10 }}
+        {{- $sc := $cfg.persistence.storageClassName | default $.Values.global.storageClassName }}
+        {{- with $sc }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $cfg.persistence.size | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
