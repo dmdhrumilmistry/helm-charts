@@ -14,6 +14,8 @@ helm search repo dmdhrumilmistry
 |---|---|---|---|
 | [netbird](netbird/) | 1.0.1 | 0.79.0 | Self-hosted [NetBird](https://netbird.io): a WireGuard-based overlay network with built-in local user management, PostgreSQL and no external identity provider required |
 | [teleport](teleport/) | 0.1.0 | 18.10.0 | Self-hosted [Teleport](https://goteleport.com) Community Edition: SSH, Kubernetes, application and database access with short-lived certificates. Single-node or HA on PostgreSQL |
+| [wazuh](wazuh/) | 0.1.0 | 4.14.7 | Self-hosted [Wazuh](https://wazuh.com) XDR and SIEM: indexer, manager and dashboard, with the internal PKI generated for you |
+| [falco](falco/) | 0.1.0 | 0.45.0 | [Falco](https://falco.org) runtime security, wrapping the official Apache-2.0 chart with opinionated defaults |
 
 ### netbird
 
@@ -61,12 +63,46 @@ the [chart README](teleport/README.md).
 > it routes by TLS ALPN and its clients use mTLS. Expose it as a
 > LoadBalancer.
 
+### wazuh
+
+```bash
+helm install wazuh dmdhrumilmistry/wazuh \
+  --namespace wazuh --create-namespace
+```
+
+No required values. The chart generates the internal certificate
+authority and every credential on first install and preserves them on
+upgrade — upstream ships raw manifests plus a shell script you must run
+to build that PKI before you can deploy at all. Full documentation, and a
+`values-homelab.yaml` overlay for a small node, are in the
+[chart README](wazuh/README.md).
+
+> The defaults want roughly 6 GiB across the stack. Back up the generated
+> `wazuh-certs` Secret: losing the CA while keeping the indexer volume
+> locks the cluster out of its own data.
+
+### falco
+
+```bash
+helm install falco dmdhrumilmistry/falco \
+  --namespace falco --create-namespace
+```
+
+A thin wrapper over the official `falcosecurity/falco` chart rather than a
+reimplementation — that chart is Apache-2.0, so it vendors in cleanly, and
+it already solves kernel driver selection. Defaults to the `modern_ebpf`
+driver (no kernel headers, no driver build, needs kernel 5.8+) with
+Kubernetes metadata enrichment and JSON output on. See the
+[chart README](falco/README.md).
+
 ## Repository layout
 
 ```
 index.yaml               # repo index served at the Pages root
 netbird/                 # chart source
 teleport/                # chart source
+wazuh/                   # chart source
+falco/                   # chart source (wraps an upstream dependency)
 */  *.tgz                # packaged releases, alongside each chart
 artifacthub-repo.yml     # Artifact Hub ownership metadata
 ```
@@ -74,7 +110,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport
+CHART=netbird            # or teleport, wazuh, falco
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \
@@ -86,6 +122,15 @@ mv "$CHART/index.yaml" index.yaml
 `--merge` keeps the entries for versions already published, so previously
 released tarballs stay resolvable and their digests do not change. Commit
 the new `.tgz` alongside the updated `index.yaml`.
+
+Two wrinkles for `falco`, which vendors an upstream dependency:
+
+- Package it into a temporary directory and move the result in. A `*.tgz`
+  rule in `.helmignore` would also exclude `charts/`, and helm's ignore
+  matcher does not honour gitignore-style leading-slash anchoring.
+- `helm repo index` recurses, so it indexes the vendored
+  `charts/falco-9.2.0.tgz` as if it were ours. Drop that entry afterwards;
+  only the wrapper version belongs in the index.
 
 ## License
 
