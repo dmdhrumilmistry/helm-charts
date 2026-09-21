@@ -1,0 +1,56 @@
+apiVersion: v2
+name: wazuh
+description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager and dashboard, with the internal PKI generated for you.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of Wazuh this chart deploys by default.
+appVersion: "4.14.7"
+
+icon: https://avatars.githubusercontent.com/u/11178869
+
+home: https://wazuh.com
+sources:
+  - https://github.com/wazuh/wazuh
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - wazuh
+  - siem
+  - xdr
+  - security
+  - intrusion-detection
+  - log-analysis
+  - opensearch
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # This chart is MIT. It deploys Wazuh, which upstream licenses under
+  # GPL-2.0. The chart contains no Wazuh source and redistributes no GPL
+  # files; it only references the published images. GPL-2.0 has no network
+  # clause, so running Wazuh unmodified imposes nothing on you.
+  artifacthub.io/license: MIT
+  artifacthub.io/images: |
+    - name: wazuh-manager
+      image: wazuh/wazuh-manager:4.14.7
+    - name: wazuh-indexer
+      image: wazuh/wazuh-indexer:4.14.7
+    - name: wazuh-dashboard
+      image: wazuh/wazuh-dashboard:4.14.7
+  artifacthub.io/links: |
+    - name: Wazuh source (GPL-2.0)
+      url: https://github.com/wazuh/wazuh
+    - name: Wazuh documentation
+      url: https://documentation.wazuh.com/
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. Wazuh indexer, manager and dashboard.
+    - kind: added
+      description: Internal PKI generated at install time and preserved across upgrades, replacing the cert-generation script upstream requires you to run by hand.
+    - kind: added
+      description: Credentials generated once and reused on upgrade, including the bcrypt hashes the indexer needs.

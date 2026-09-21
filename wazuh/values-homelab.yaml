@@ -1,0 +1,50 @@
+# =====================================================================
+# Wazuh sized for a single small node (roughly 4 vCPU / 8 GiB).
+#
+#   helm install wazuh dmdhrumilmistry/wazuh \
+#     -n wazuh --create-namespace \
+#     -f values-homelab.yaml
+#
+# This is the configuration the chart is verified against. It trades away
+# every bit of redundancy to fit: one indexer with no replica shards, one
+# manager, no workers. Fine for a lab or a proof of concept; do not put
+# production alerting on it.
+# =====================================================================
+
+indexer:
+  # A single node cannot host replica shards, so indices stay yellow
+  # rather than green. That is expected here, not a fault.
+  replicaCount: 1
+  heapSize: 768m
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  persistence:
+    size: 10Gi
+
+manager:
+  master:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    persistence:
+      size: 10Gi
+  worker:
+    # Clustering needs a full ossec.conf and a second manager's worth of
+    # memory. Neither is worth it on one node.
+    replicaCount: 0
+
+dashboard:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi

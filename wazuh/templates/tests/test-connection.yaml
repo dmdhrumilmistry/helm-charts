@@ -1,0 +1,77 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "wazuh.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: {{ include "wazuh.image" (dict "root" . "image" .Values.tests.image "defaultTag" .Values.tests.image.tag) }}
+      env:
+        - name: INDEXER_USER
+          valueFrom:
+            secretKeyRef: { name: {{ include "wazuh.secretName" . }}, key: indexerUsername }
+        - name: INDEXER_PASS
+          valueFrom:
+            secretKeyRef: { name: {{ include "wazuh.secretName" . }}, key: indexerPassword }
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          IDX="{{ include "wazuh.indexer.url" . }}"
+
+          echo "==> indexer: authenticated cluster health"
+          curl -fsS --cacert /certs/root-ca.pem -u "$INDEXER_USER:$INDEXER_PASS" \
+            "$IDX/_cluster/health" > /tmp/health.json
+          cat /tmp/health.json; echo ""
+
+          echo "==> indexer certificate is trusted by the chart CA"
+          echo "    ok (curl verified it above)"
+
+          echo "==> cluster status is green or yellow"
+          grep -qE '"status":"(green|yellow)"' /tmp/health.json \
+            && echo "    ok" \
+            || { echo "    FAILED: cluster is red"; exit 1; }
+
+          echo "==> generated credentials actually authenticate"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --cacert /certs/root-ca.pem \
+            -u "$INDEXER_USER:wrong-password" "$IDX/_cluster/health")
+          [ "$code" = "401" ] \
+            && echo "    ok (wrong password rejected with 401)" \
+            || { echo "    FAILED: expected 401 for a bad password, got $code"; exit 1; }
+          {{- if .Values.dashboard.enabled }}
+
+          echo "==> dashboard: serving HTTPS"
+          curl -fsSk -o /dev/null "https://{{ include "wazuh.dashboard.fullname" . }}:{{ .Values.dashboard.service.port }}/app/status"
+          echo "    ok"
+          {{- end }}
+      volumeMounts:
+        - name: certs
+          mountPath: /certs
+          readOnly: true
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { memory: 64Mi }
+  volumes:
+    - name: certs
+      secret:
+        secretName: {{ include "wazuh.certsSecretName" . }}
+        items:
+          - key: root-ca.pem
+            path: root-ca.pem
+{{- end }}

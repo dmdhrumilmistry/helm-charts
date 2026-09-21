@@ -1,0 +1,308 @@
+# =====================================================================
+# Wazuh — open source XDR and SIEM
+#
+# Installs with no required values:
+#
+#   helm install wazuh dmdhrumilmistry/wazuh \
+#     --namespace wazuh --create-namespace
+#
+# The chart generates the internal PKI and every credential on first
+# install, and reads them back on upgrade. Upstream makes you run a shell
+# script to produce those certificates before you can deploy at all.
+#
+# SIZING: these defaults are for a real deployment and want roughly 6 GiB
+# of memory across the stack. For a small node, use values-homelab.yaml.
+#
+# LICENSING: this chart is MIT. Wazuh is GPL-2.0, which has no network
+# clause — running it unmodified imposes nothing on you.
+# =====================================================================
+
+global:
+  clusterDomain: cluster.local
+  imageRegistry: ""
+  imagePullSecrets: []
+  # Applied to indexer, manager and dashboard unless overridden per
+  # component. Empty uses the cluster default.
+  storageClassName: ""
+
+commonLabels: {}
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# =====================================================================
+# Internal TLS
+#
+# The indexer's security plugin authenticates nodes and the admin client
+# by certificate, so this PKI is not optional — the stack will not start
+# without it.
+#
+# WARNING: the CA is generated once and preserved on upgrade. Losing it
+# while keeping the indexer volume locks the cluster out of its own data.
+# Back the Secret up alongside your credentials.
+# =====================================================================
+tls:
+  validityDays: 3650
+  # Supply your own instead. Must contain root-ca.pem, node.pem,
+  # node-key.pem, admin.pem, admin-key.pem, filebeat.pem,
+  # filebeat-key.pem, dashboard.pem and dashboard-key.pem.
+  existingSecret: ""
+
+# =====================================================================
+# Credentials
+#
+# Generated once and read back on upgrade. The bcrypt hashes the indexer
+# needs are derived from these and stored alongside them.
+# =====================================================================
+secrets:
+  # Indexer admin user (also used by the manager's filebeat output).
+  indexerPassword: ""
+  # Account the dashboard uses to query the indexer.
+  dashboardPassword: ""
+  # Wazuh manager REST API.
+  apiPassword: ""
+  # Pre-shared key agents present when registering.
+  authdPass: ""
+  # Shared secret binding master and workers into one Wazuh cluster.
+  clusterKey: ""
+
+existingSecret: ""
+
+usernames:
+  indexer: admin
+  dashboard: kibanaserver
+  api: wazuh-wui
+
+# =====================================================================
+# Indexer (OpenSearch fork)
+#
+# The memory-hungry part. Heap should be about half the container limit
+# and never above ~31 GiB.
+# =====================================================================
+indexer:
+  image:
+    registry: ""
+    repository: wazuh/wazuh-indexer
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 3
+
+  # Passed as OPENSEARCH_JAVA_OPTS. Keep resources.limits.memory at
+  # roughly twice this.
+  heapSize: 2g
+
+  service:
+    type: ClusterIP
+    port: 9200
+    transportPort: 9300
+    annotations: {}
+
+  persistence:
+    enabled: true
+    size: 50Gi
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ""
+    annotations: {}
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      memory: 4Gi
+
+  # OpenSearch needs vm.max_map_count raised on the host. This runs a
+  # privileged init container to do it. Turn off if your nodes already
+  # set it, or if privileged containers are barred — the indexer will
+  # refuse to start otherwise.
+  sysctlInitContainer:
+    enabled: true
+    image:
+      registry: ""
+      repository: busybox
+      tag: "1.37"
+
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+
+  # Merged into opensearch.yml last.
+  extraConfig: {}
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+# =====================================================================
+# Manager
+#
+# The master receives agent registrations and runs the API. Workers take
+# the agent connection load.
+#
+# Clustering requires a full ossec.conf, because the container copies
+# whatever is mounted over the image's own config rather than merging.
+# With worker.replicaCount above 0 you must supply `config` below.
+# =====================================================================
+manager:
+  image:
+    registry: ""
+    repository: wazuh/wazuh-manager
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  # Full ossec.conf. Left empty the image's default is used, which runs a
+  # single manager with no clustering — correct for most installs.
+  #
+  # For a cluster, set the placeholders below and the container fills them
+  # in at startup:
+  #   <node_name>to_be_replaced_by_hostname</node_name>
+  #   <key>to_be_replaced_by_cluster_key</key>
+  #
+  # See https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/
+  config: ""
+  # Separate config for workers. Falls back to `config` when empty.
+  workerConfig: ""
+
+  master:
+    replicaCount: 1
+    service:
+      # Agents connect here to register. LoadBalancer when they live
+      # outside the cluster.
+      type: ClusterIP
+      registrationPort: 1515
+      apiPort: 55000
+      annotations: {}
+      loadBalancerIP: ""
+      externalTrafficPolicy: ""
+    persistence:
+      enabled: true
+      size: 50Gi
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    podAnnotations: {}
+    podLabels: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+
+  worker:
+    # 0 runs a single manager with no cluster. Above 0 requires
+    # manager.config.
+    replicaCount: 0
+    service:
+      # Where agents send events.
+      type: ClusterIP
+      agentPort: 1514
+      annotations: {}
+      loadBalancerIP: ""
+      externalTrafficPolicy: ""
+    persistence:
+      enabled: true
+      size: 50Gi
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    podAnnotations: {}
+    podLabels: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+
+# =====================================================================
+# Dashboard
+# =====================================================================
+dashboard:
+  enabled: true
+
+  image:
+    registry: ""
+    repository: wazuh/wazuh-dashboard
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  # The image runs as uid/gid 1000 and reads its TLS key from a mounted
+  # Secret. Without a matching fsGroup those files stay root-owned and the
+  # dashboard dies on startup with EACCES.
+  podSecurityContext:
+    fsGroup: 1000
+
+  service:
+    type: ClusterIP
+    port: 5601
+    annotations: {}
+    loadBalancerIP: ""
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+  # Merged into opensearch_dashboards.yml last.
+  extraConfig: {}
+
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+
+# =====================================================================
+# Ingress (dashboard only)
+#
+# The dashboard serves HTTPS with its own certificate, so the controller
+# must talk HTTPS to the backend. The agent and indexer protocols are not
+# HTTP and cannot be published this way — expose those with a Service.
+# =====================================================================
+ingress:
+  enabled: false
+  # traefik | nginx | other
+  controller: nginx
+  className: ""
+  host: ""
+  annotations: {}
+  tls:
+    enabled: true
+    clusterIssuer: ""
+    secretName: ""
+
+# =====================================================================
+# Tests (helm test)
+# =====================================================================
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: curlimages/curl
+    tag: "8.11.1"

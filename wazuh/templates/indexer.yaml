@@ -1,0 +1,230 @@
+{{- $fullName := include "wazuh.indexer.fullname" . -}}
+{{- $labels := include "wazuh.componentLabels" (dict "root" . "component" "indexer") -}}
+{{- $selector := include "wazuh.componentSelectorLabels" (dict "root" . "component" "indexer") -}}
+{{- $certDir := "/usr/share/wazuh-indexer/config/certs" -}}
+{{/*
+Headless Service. The indexer discovers its peers through per-pod DNS,
+which only a headless Service provides.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+  {{- with .Values.indexer.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  clusterIP: None
+  # Peers must resolve each other before the cluster forms, so addresses
+  # have to be published while pods are still unready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: {{ .Values.indexer.service.port }}
+      targetPort: http
+      protocol: TCP
+    - name: transport
+      port: {{ .Values.indexer.service.transportPort }}
+      targetPort: transport
+      protocol: TCP
+  selector:
+    {{- $selector | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  serviceName: {{ $fullName }}
+  replicas: {{ .Values.indexer.replicaCount }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+        {{- with .Values.indexer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmaps.yaml") . | sha256sum }}
+        {{- with .Values.indexer.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "wazuh.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "wazuh.serviceAccountName" . }}
+      securityContext:
+        fsGroup: 1000
+      {{- with .Values.indexer.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if .Values.indexer.sysctlInitContainer.enabled }}
+      initContainers:
+        # OpenSearch memory-maps its indices and refuses to start if
+        # vm.max_map_count is at the Linux default of 65530. It is a host
+        # setting, so raising it needs a privileged container.
+        - name: set-max-map-count
+          image: {{ include "wazuh.image" (dict "root" . "image" .Values.indexer.sysctlInitContainer.image "defaultTag" .Values.indexer.sysctlInitContainer.image.tag) }}
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      {{- end }}
+      containers:
+        - name: wazuh-indexer
+          image: {{ include "wazuh.image" (dict "root" . "image" .Values.indexer.image) }}
+          imagePullPolicy: {{ .Values.indexer.image.pullPolicy }}
+          securityContext:
+            runAsUser: 1000
+          env:
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms{{ .Values.indexer.heapSize }} -Xmx{{ .Values.indexer.heapSize }} -Dlog4j2.formatMsgNoLookups=true"
+            - name: CLUSTER_NAME
+              value: {{ include "wazuh.fullname" . }}
+            - name: NETWORK_HOST
+              value: "0.0.0.0"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: DISCOVERY_SERVICE
+              value: {{ $fullName }}
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Without this the image installs its own demo users and
+            # certificates over the ones the chart generated.
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 9200
+              protocol: TCP
+            - name: transport
+              containerPort: 9300
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket:
+              port: transport
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/wazuh-indexer
+            - name: config
+              mountPath: /usr/share/wazuh-indexer/config/opensearch.yml
+              subPath: opensearch.yml
+              readOnly: true
+            - name: config
+              mountPath: /usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml
+              subPath: internal_users.yml
+              readOnly: true
+            {{- range $f := list "node.pem" "node-key.pem" "root-ca.pem" "admin.pem" "admin-key.pem" }}
+            - name: certs
+              mountPath: {{ printf "%s/%s" $certDir $f }}
+              subPath: {{ $f }}
+              readOnly: true
+            {{- end }}
+          {{- with .Values.indexer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullName }}-config
+        - name: certs
+          secret:
+            secretName: {{ include "wazuh.certsSecretName" . }}
+            defaultMode: 0400
+        {{- if not .Values.indexer.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.indexer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.indexer.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- $labels | nindent 10 }}
+        {{- with .Values.indexer.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.indexer.persistence.accessModes | nindent 10 }}
+        {{- $sc := .Values.indexer.persistence.storageClassName | default .Values.global.storageClassName }}
+        {{- with $sc }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.indexer.persistence.size | quote }}
+  {{- end }}
+{{- if .Values.indexer.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  {{- if .Values.indexer.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.indexer.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ .Values.indexer.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+{{- end }}

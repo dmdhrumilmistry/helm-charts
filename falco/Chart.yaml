@@ -1,0 +1,55 @@
+apiVersion: v2
+name: falco
+description: Falco runtime security for Kubernetes, wrapping the official chart with opinionated defaults, Falcosidekick output and a starter ruleset.
+type: application
+
+# Chart version. Bump on every change to this wrapper or its defaults.
+version: 0.1.0
+
+# Falco version, matching the pinned upstream chart.
+appVersion: "0.45.0"
+
+icon: https://raw.githubusercontent.com/falcosecurity/community/master/logo/primary-logo.png
+
+home: https://falco.org
+sources:
+  - https://github.com/falcosecurity/falco
+  - https://github.com/falcosecurity/charts
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - falco
+  - runtime-security
+  - threat-detection
+  - ebpf
+  - cncf
+  - security
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+# Falco's official chart is Apache-2.0, so depending on it raises no
+# licence conflict with this repository. Writing a replacement from
+# scratch would mean reimplementing kernel driver selection and the
+# driver-loader init container, which upstream already solves and keeps
+# working across kernel versions — so this wraps it rather than forking.
+dependencies:
+  - name: falco
+    version: "9.2.0"
+    repository: https://falcosecurity.github.io/charts
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Falco (Apache-2.0)
+      url: https://github.com/falcosecurity/falco
+    - name: Upstream chart (Apache-2.0)
+      url: https://github.com/falcosecurity/charts/tree/master/charts/falco
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. Wraps the official Falco chart 9.2.0 (Falco 0.45.0).
+    - kind: added
+      description: Defaults to the modern_ebpf driver, which needs no kernel headers and no privileged driver build.
+    - kind: added
+      description: Optional starter rules for Kubernetes, off by default so upstream rules stay authoritative.
