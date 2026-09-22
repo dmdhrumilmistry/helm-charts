@@ -14,8 +14,9 @@ helm search repo dmdhrumilmistry
 |---|---|---|---|
 | [netbird](netbird/) | 1.0.1 | 0.79.0 | Self-hosted [NetBird](https://netbird.io): a WireGuard-based overlay network with built-in local user management, PostgreSQL and no external identity provider required |
 | [teleport](teleport/) | 0.1.0 | 18.10.0 | Self-hosted [Teleport](https://goteleport.com) Community Edition: SSH, Kubernetes, application and database access with short-lived certificates. Single-node or HA on PostgreSQL |
-| [wazuh](wazuh/) | 0.1.0 | 4.14.7 | Self-hosted [Wazuh](https://wazuh.com) XDR and SIEM: indexer, manager and dashboard, with the internal PKI generated for you |
+| [wazuh](wazuh/) | 0.1.1 | 4.14.7 | Self-hosted [Wazuh](https://wazuh.com) XDR and SIEM: indexer, manager and dashboard, with the internal PKI generated for you |
 | [falco](falco/) | 0.1.0 | 0.45.0 | [Falco](https://falco.org) runtime security, wrapping the official Apache-2.0 chart with opinionated defaults |
+| [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
 
 ### netbird
 
@@ -95,6 +96,29 @@ driver (no kernel headers, no driver build, needs kernel 5.8+) with
 Kubernetes metadata enrichment and JSON output on. See the
 [chart README](falco/README.md).
 
+### adguard-home
+
+```bash
+helm install adguard dmdhrumilmistry/adguard-home   --namespace adguard --create-namespace
+```
+
+Renders `AdGuardHome.yaml` from values, so the setup wizard never appears
+and your local DNS names live in version control rather than in a web UI.
+The point is `rewrites` — names that resolve only inside your network:
+
+```yaml
+rewrites:
+  - domain: "*.home.arpa"
+    answer: "10.0.0.5"
+```
+
+`.home.arpa` is reserved by RFC 8375 for home networks, so it never
+collides with a real domain and never leaks to a public resolver. See the
+[chart README](adguard-home/README.md).
+
+> Point your router's DHCP at the DNS Service address and every device on
+> the network resolves through it.
+
 ## Repository layout
 
 ```
@@ -103,6 +127,7 @@ netbird/                 # chart source
 teleport/                # chart source
 wazuh/                   # chart source
 falco/                   # chart source (wraps an upstream dependency)
+adguard-home/            # chart source
 */  *.tgz                # packaged releases, alongside each chart
 artifacthub-repo.yml     # Artifact Hub ownership metadata
 ```
@@ -110,7 +135,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport, wazuh, falco
+CHART=netbird            # or teleport, wazuh, falco, adguard-home
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \

@@ -250,8 +250,11 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: data
+        # Selector labels only. volumeClaimTemplates are immutable, so a
+        # version-bearing label like helm.sh/chart would make every chart
+        # version bump an un-upgradable StatefulSet.
         labels:
-          {{- $labels | nindent 10 }}
+          {{- include "wazuh.componentSelectorLabels" (dict "root" $ "component" "manager") | nindent 10 }}
       spec:
         accessModes:
           {{- toYaml $cfg.persistence.accessModes | nindent 10 }}

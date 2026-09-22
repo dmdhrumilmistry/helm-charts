@@ -1,0 +1,75 @@
+AdGuard Home {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+The setup wizard is already done — the chart wrote the config, so you go
+straight to the login.
+
+1. Read the admin password
+{{ if .Values.existingSecret }}
+   From the Secret you supplied: {{ .Values.existingSecret }}
+{{- else }}
+     kubectl get secret -n {{ .Release.Namespace }} {{ include "adguard.secretName" . }} \
+       -o go-template='{{ "{{" }}.data.password|base64decode{{ "}}" }}{{ "{{" }}"\n"{{ "}}" }}'
+
+   Username: {{ .Values.auth.username }}
+{{- end }}
+
+2. Open the web UI
+{{ if .Values.ingress.enabled }}
+   https://{{ .Values.ingress.host }}
+{{- else }}
+     kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "adguard.fullname" . }} {{ .Values.web.port }}:{{ .Values.web.service.port }}
+
+   Then http://localhost:{{ .Values.web.port }}
+{{- end }}
+
+3. Point your network at it
+
+     kubectl get svc -n {{ .Release.Namespace }} {{ include "adguard.fullname" . }}-dns
+{{- if eq .Values.dns.service.type "LoadBalancer" }}
+
+   Set that EXTERNAL-IP as the DNS server in your router's DHCP settings,
+   and every device on the network resolves through AdGuard. Until you do,
+   only clients configured to use it directly will see your rewrites.
+{{- else }}
+
+   dns.service.type is {{ .Values.dns.service.type }}, so this is not
+   reachable from the rest of your network. Set it to LoadBalancer for a
+   network-wide resolver.
+{{- end }}
+{{- if .Values.rewrites }}
+
+4. Local names configured
+{{ range .Values.rewrites }}
+     {{ .domain }} -> {{ .answer }}
+{{- end }}
+
+   Test one without changing any client settings:
+
+     nslookup {{ (first .Values.rewrites).domain | replace "*" "test" }} <EXTERNAL-IP>
+{{- else }}
+
+4. No DNS rewrites configured
+
+   The main reason to self-host this is names that resolve only inside
+   your network. Add them under `rewrites` in your values, for example:
+
+     rewrites:
+       - domain: "*.home.arpa"
+         answer: "10.0.0.5"
+
+   .home.arpa is reserved by RFC 8375 for home networks, so it can never
+   collide with a real domain or leak to a public resolver.
+{{- end }}
+
+5. Check it over
+
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+NOTE ON CONFIG: AdGuard rewrites its own config file whenever you change
+a setting in the web UI, so the chart seeds it on first start and then
+leaves it alone. Changing values later will NOT overwrite what the UI
+has since written. To re-seed from values, delete the config on the
+volume and restart:
+
+     kubectl exec -n {{ .Release.Namespace }} {{ include "adguard.fullname" . }}-0 -- rm /opt/adguardhome/conf/AdGuardHome.yaml
+     kubectl rollout restart -n {{ .Release.Namespace }} sts/{{ include "adguard.fullname" . }}

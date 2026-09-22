@@ -1,0 +1,66 @@
+{{/*
+AdGuardHome.yaml, rendered from values.
+
+Held in a Secret rather than a ConfigMap because it carries the admin
+password hash. Schema verified against a real v0.107.79 instance rather
+than written from the docs.
+*/}}
+{{/*
+Each rewrite carries enabled: true unless you set it yourself. AdGuard's
+struct zero-values that field to false, so a rewrite written without it
+lands in the config and silently never matches.
+*/}}
+{{- $rewrites := list -}}
+{{- range .Values.rewrites -}}
+{{- $r := deepCopy . -}}
+{{- if not (hasKey $r "enabled") -}}{{- $_ := set $r "enabled" true -}}{{- end -}}
+{{- $rewrites = append $rewrites $r -}}
+{{- end -}}
+{{- $cfg := dict
+      "http" (dict
+        "address" (printf "0.0.0.0:%v" .Values.web.port)
+        "session_ttl" "30d")
+      "users" (list (dict
+        "name" .Values.auth.username
+        "password" (include "adguard.gen" (dict "root" . "key" "passwordHash"))))
+      "auth_attempts" 5
+      "block_auth_min" 15
+      "theme" "auto"
+      "dns" (dict
+        "bind_hosts" (list "0.0.0.0")
+        "port" (int .Values.dns.port)
+        "upstream_dns" .Values.dns.upstreams
+        "bootstrap_dns" .Values.dns.bootstrap
+        "upstream_mode" .Values.dns.upstreamMode
+        "cache_enabled" .Values.dns.cache.enabled
+        "cache_size" (int .Values.dns.cache.size)
+        "enable_dnssec" .Values.dns.enableDNSSEC
+        "trusted_proxies" .Values.dns.trustedProxies
+        "ratelimit" 20
+        "refuse_any" true)
+      "filters" .Values.filters
+      "whitelist_filters" (list)
+      "user_rules" .Values.userRules
+      "filtering" (dict
+        "rewrites" $rewrites
+        "filtering_enabled" .Values.filtering.enabled
+        "rewrites_enabled" true
+        "protection_enabled" true
+        "blocking_mode" "default"
+        "parental_enabled" .Values.filtering.parental
+        "safebrowsing_enabled" .Values.filtering.safeBrowsing
+        "safe_search" (dict "enabled" .Values.filtering.safeSearch))
+      "schema_version" 34
+-}}
+{{- $cfg = mergeOverwrite $cfg (deepCopy (.Values.extraConfig | default dict)) -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "adguard.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "adguard.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  AdGuardHome.yaml: |
+    {{- toYaml $cfg | nindent 4 }}

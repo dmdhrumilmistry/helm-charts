@@ -1,0 +1,45 @@
+apiVersion: v2
+name: adguard-home
+description: Self-hosted AdGuard Home — network-wide DNS with ad blocking and local DNS rewrites, configured declaratively.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of AdGuard Home this chart deploys by default.
+appVersion: "0.107.79"
+
+icon: https://cdn.adguard.com/public/Adguard/Common/Logos/home.svg
+
+home: https://adguard.com/adguard-home.html
+sources:
+  - https://github.com/AdguardTeam/AdGuardHome
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - adguard
+  - dns
+  - adblock
+  - homelab
+  - dns-rewrite
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # This chart is MIT. AdGuard Home is GPL-3.0, which has no network
+  # clause — running it unmodified imposes nothing on you. The chart
+  # contains no AdGuard source and references the published image.
+  artifacthub.io/license: MIT
+  artifacthub.io/images: |
+    - name: adguardhome
+      image: adguard/adguardhome:v0.107.79
+  artifacthub.io/links: |
+    - name: AdGuard Home source (GPL-3.0)
+      url: https://github.com/AdguardTeam/AdGuardHome
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. Renders AdGuardHome.yaml from values, so the setup wizard is skipped entirely and DNS rewrites are declarative.
+    - kind: added
+      description: Admin password generated once and preserved across upgrades, stored as the bcrypt hash AdGuard expects.

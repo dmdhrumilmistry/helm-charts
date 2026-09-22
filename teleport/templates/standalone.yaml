@@ -151,8 +151,11 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: data
+        # Selector labels only. volumeClaimTemplates are immutable, so a
+        # version-bearing label like helm.sh/chart would make every chart
+        # version bump an un-upgradable StatefulSet.
         labels:
-          {{- $labels | nindent 10 }}
+          {{- include "teleport.componentSelectorLabels" (dict "root" . "component" "standalone") | nindent 10 }}
         {{- with .Values.persistence.annotations }}
         annotations:
           {{- toYaml . | nindent 10 }}

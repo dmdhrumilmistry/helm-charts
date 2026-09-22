@@ -1,0 +1,216 @@
+# =====================================================================
+# AdGuard Home — network-wide DNS with ad blocking and local rewrites
+#
+#   helm install adguard dmdhrumilmistry/adguard-home \
+#     --namespace adguard --create-namespace \
+#     --set dns.service.loadBalancerIP=192.0.2.10
+#
+# The chart renders AdGuardHome.yaml from the values below, so the setup
+# wizard never appears and your DNS rewrites are declarative rather than
+# clicked into a UI and forgotten.
+#
+# LICENSING: this chart is MIT. AdGuard Home is GPL-3.0, which has no
+# network clause, so running it unmodified imposes nothing on you.
+# =====================================================================
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ""
+  repository: adguard/adguardhome
+  # Defaults to the chart's appVersion, prefixed with v.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+commonLabels: {}
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+replicaCount: 1
+
+# =====================================================================
+# Admin login
+#
+# Generated on first install and read back from the cluster on upgrade,
+# so re-running helm never changes the password out from under you.
+# AdGuard stores it as a bcrypt hash; the chart keeps both, because
+# bcrypt salts randomly and rehashing every render would restart the pod.
+# =====================================================================
+auth:
+  username: admin
+  # Leave empty to generate one.
+  password: ""
+
+existingSecret: ""
+
+# =====================================================================
+# Local DNS rewrites
+#
+# The reason to run this rather than point at a public resolver: names
+# that resolve only inside your network, with no query ever leaving it.
+#
+# A wildcard sends every subdomain to one address, which suits a cluster
+# where an ingress controller fronts everything:
+#
+#   - domain: "*.home.arpa"
+#     answer: "192.0.2.10"
+#
+# .home.arpa is reserved by RFC 8375 for exactly this, so it can never
+# collide with a real domain or leak to a public resolver.
+# =====================================================================
+rewrites: []
+  # - domain: "*.home.arpa"
+  #   answer: "192.0.2.10"
+  # - domain: "nas.home.arpa"
+  #   answer: "192.0.2.20"
+
+# =====================================================================
+# DNS
+# =====================================================================
+dns:
+  port: 53
+
+  # Where AdGuard forwards queries it does not answer itself. These
+  # defaults are DNS-over-HTTPS, so your ISP cannot read them.
+  upstreams:
+    - https://dns10.quad9.net/dns-query
+  # Plain DNS, used only to resolve the upstream hostnames above.
+  bootstrap:
+    - 9.9.9.10
+    - 149.112.112.10
+
+  # load_balance | parallel | fastest_addr
+  upstreamMode: load_balance
+
+  cache:
+    enabled: true
+    size: 4194304
+  enableDNSSEC: true
+
+  # Networks allowed to set a client address through a proxy. Narrow this
+  # if AdGuard sits behind one.
+  trustedProxies:
+    - 127.0.0.0/8
+    - ::1/128
+
+  service:
+    # LoadBalancer so every device on the network can resolve against it.
+    # This is the address you point your router's DHCP at.
+    type: LoadBalancer
+    annotations: {}
+    loadBalancerIP: ""
+    loadBalancerClass: ""
+    # Preserves the querying client's address, which AdGuard needs for
+    # per-client rules and for the statistics to mean anything.
+    externalTrafficPolicy: Local
+
+# =====================================================================
+# Web UI
+# =====================================================================
+web:
+  port: 3000
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations: {}
+    loadBalancerIP: ""
+
+# =====================================================================
+# Blocklists
+#
+# Seeded from AdGuard's own defaults. id must be unique.
+# =====================================================================
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: false
+    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
+    name: AdAway Default Blocklist
+    id: 2
+
+# Hand-written filtering rules, in AdGuard's syntax.
+userRules: []
+
+filtering:
+  enabled: true
+  safeSearch: false
+  parental: false
+  safeBrowsing: false
+
+# Merged into the generated AdGuardHome.yaml last, for keys this chart
+# does not model. Structure follows AdGuard's own config file.
+extraConfig: {}
+
+# =====================================================================
+# Persistence
+#
+# Holds query logs, statistics and downloaded blocklists. The generated
+# config is mounted separately, so losing this costs you history, not
+# your configuration.
+# =====================================================================
+persistence:
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  existingClaim: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# =====================================================================
+# Ingress (web UI only)
+#
+# DNS is not HTTP and cannot be published this way — that is what
+# dns.service is for.
+# =====================================================================
+ingress:
+  enabled: false
+  # traefik | nginx | other
+  controller: nginx
+  className: ""
+  host: ""
+  annotations: {}
+  tls:
+    enabled: true
+    clusterIssuer: ""
+    secretName: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    # Binding port 53 needs this unless you remap dns.port above 1024.
+    add:
+      - NET_BIND_SERVICE
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: curlimages/curl
+    tag: "8.11.1"
