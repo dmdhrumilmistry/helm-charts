@@ -158,6 +158,12 @@ metadata:
   {{- if and .Values.ingress.enabled (eq .Values.ingress.controller "traefik") }}
   {{- /* Traefik reads the backend scheme off the Service, not the Ingress. */}}
   {{- $_ := set $svcAnn "traefik.ingress.kubernetes.io/service.serversscheme" "https" }}
+  {{- /*
+  Traefik dials pod IPs, and the dashboard's certificate is issued for the
+  Service name. Without a ServersTransport pinning serverName and trusting
+  the chart CA, verification fails and every request 500s.
+  */}}
+  {{- $_ := set $svcAnn "traefik.ingress.kubernetes.io/service.serverstransport" (printf "%s-%s@kubernetescrd" .Release.Namespace $fullName) }}
   {{- end }}
   {{- if $svcAnn }}
   annotations:
@@ -204,11 +210,21 @@ spec:
   {{- with .Values.ingress.className }}
   ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.ingress.tls.enabled }}
+  {{- /*
+  Only claim a TLS secret that something will actually create: one you
+  named, or one cert-manager will issue. Otherwise the controller serves
+  its own default certificate instead of logging a missing-secret error
+  on every reconcile.
+  */}}
+  {{- $tlsSecret := .Values.ingress.tls.secretName }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.clusterIssuer (not $tlsSecret) }}
+  {{- $tlsSecret = printf "%s-tls" $fullName }}
+  {{- end }}
+  {{- if and .Values.ingress.tls.enabled $tlsSecret }}
   tls:
     - hosts:
         - {{ $host | quote }}
-      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" $fullName) }}
+      secretName: {{ $tlsSecret }}
   {{- end }}
   rules:
     - host: {{ $host | quote }}
@@ -222,4 +238,24 @@ spec:
                 port:
                   name: https
 {{- end }}
+{{- end }}
+{{- if and .Values.dashboard.enabled .Values.ingress.enabled (eq .Values.ingress.controller "traefik") }}
+---
+{{/*
+Traefik-only. Guarded by ingress.controller so the CRD is never required
+on clusters running something else.
+*/}}
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ include "wazuh.dashboard.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wazuh.componentLabels" (dict "root" . "component" "dashboard") | nindent 4 }}
+spec:
+  # Verify against the name on the certificate rather than the pod IP
+  # Traefik actually dials.
+  serverName: {{ printf "%s.%s.svc.%s" (include "wazuh.dashboard.fullname" .) .Release.Namespace .Values.global.clusterDomain | quote }}
+  rootCAsSecrets:
+    - {{ include "wazuh.certsSecretName" . }}
 {{- end }}

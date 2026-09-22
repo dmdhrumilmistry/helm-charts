@@ -1,18 +1,68 @@
 apiVersion: v1
 entries:
+  adguard-home:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. Renders AdGuardHome.yaml from values, so the setup wizard is skipped entirely and DNS rewrites are declarative.
+        - kind: added
+          description: Admin password generated once and preserved across upgrades, stored as the bcrypt hash AdGuard expects.
+      artifacthub.io/images: |
+        - name: adguardhome
+          image: adguard/adguardhome:v0.107.79
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: AdGuard Home source (GPL-3.0)
+          url: https://github.com/AdguardTeam/AdGuardHome
+    apiVersion: v2
+    appVersion: 0.107.79
+    created: "2026-09-22T14:57:51.7461171+05:30"
+    description: Self-hosted AdGuard Home — network-wide DNS with ad blocking and
+      local DNS rewrites, configured declaratively.
+    digest: 54cbad745ff259444c7575d2e0192042c9ead5492be4706ca511746769cb1be8
+    home: https://adguard.com/adguard-home.html
+    icon: https://cdn.adguard.com/public/Adguard/Common/Logos/home.svg
+    keywords:
+    - adguard
+    - dns
+    - adblock
+    - homelab
+    - dns-rewrite
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: adguard-home
+    sources:
+    - https://github.com/AdguardTeam/AdGuardHome
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/adguard-home/adguard-home-0.1.0.tgz
+    version: 0.1.0
   falco:
   - annotations:
-      artifacthub.io/changes: "- kind: added\n  description: Initial release. Wraps the official Falco chart 9.2.0 (Falco 0.45.0).\n- kind: added\n  description: Defaults to the modern_ebpf driver, which needs no kernel headers and no privileged driver build.\n- kind: added\n  description: Optional starter rules for Kubernetes, off by default so upstream rules stay authoritative.\n"
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. Wraps the official Falco chart 9.2.0 (Falco 0.45.0).
+        - kind: added
+          description: Defaults to the modern_ebpf driver, which needs no kernel headers and no privileged driver build.
+        - kind: added
+          description: Optional starter rules for Kubernetes, off by default so upstream rules stay authoritative.
       artifacthub.io/license: MIT
-      artifacthub.io/links: "- name: Falco (Apache-2.0)\n  url: https://github.com/falcosecurity/falco\n- name: Upstream chart (Apache-2.0)\n  url: https://github.com/falcosecurity/charts/tree/master/charts/falco\n"
+      artifacthub.io/links: |
+        - name: Falco (Apache-2.0)
+          url: https://github.com/falcosecurity/falco
+        - name: Upstream chart (Apache-2.0)
+          url: https://github.com/falcosecurity/charts/tree/master/charts/falco
     apiVersion: v2
     appVersion: 0.45.0
-    created: '2026-09-21T21:31:31.5097533+05:30'
+    created: "2026-09-21T21:31:31.5097533+05:30"
     dependencies:
     - name: falco
       repository: https://falcosecurity.github.io/charts
       version: 9.2.0
-    description: Falco runtime security for Kubernetes, wrapping the official chart with opinionated defaults, Falcosidekick output and a starter ruleset.
+    description: Falco runtime security for Kubernetes, wrapping the official chart
+      with opinionated defaults, Falcosidekick output and a starter ruleset.
     digest: 777e9185454bb37236c3b3522aa89c4578be169f88b3a61fd48d617fe48caaba
     home: https://falco.org
     icon: https://raw.githubusercontent.com/falcosecurity/community/master/logo/primary-logo.png
@@ -37,12 +87,25 @@ entries:
     version: 0.1.0
   netbird:
   - annotations:
-      artifacthub.io/changes: "- kind: fixed\n  description: Correct the object names in the README's troubleshooting and backup commands. They carried a doubled netbird- prefix that does not match what the chart renders.\n- kind: changed\n  description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).\n- kind: added\n  description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.\n- kind: added\n  description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.\n- kind: added\n  description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.\n- kind: removed\n  description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.\n"
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Correct the object names in the README's troubleshooting and backup commands. They carried a doubled netbird- prefix that does not match what the chart renders.
+        - kind: changed
+          description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
+        - kind: added
+          description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.
+        - kind: added
+          description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.
+        - kind: added
+          description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.
+        - kind: removed
+          description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 0.79.0
-    created: '2026-09-20T20:04:33.7763116+05:30'
-    description: Self-hosted NetBird (WireGuard-based overlay network) with built-in local user management, PostgreSQL and zero external IdP required.
+    created: "2026-09-20T20:04:33.7763116+05:30"
+    description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
+      local user management, PostgreSQL and zero external IdP required.
     digest: 156dec47c97916401be00a97d0255eccbd53be590668e5dd23518ee4406d3ccd
     home: https://netbird.io
     icon: https://avatars.githubusercontent.com/u/100464677
@@ -65,12 +128,23 @@ entries:
     - https://dmdhrumilmistry.github.io/helm-charts/netbird/netbird-1.0.1.tgz
     version: 1.0.1
   - annotations:
-      artifacthub.io/changes: "- kind: changed\n  description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).\n- kind: added\n  description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.\n- kind: added\n  description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.\n- kind: added\n  description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.\n- kind: removed\n  description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.\n"
+      artifacthub.io/changes: |
+        - kind: changed
+          description: Rewritten around the combined netbirdio/netbird-server image (management + signal + relay + STUN in one workload).
+        - kind: added
+          description: Built-in local user management (embedded Dex IdP). No external OIDC provider required to install.
+        - kind: added
+          description: In-cluster PostgreSQL StatefulSet, enabled by default, with support for an external database.
+        - kind: added
+          description: Autoscaling (HPA), PodDisruptionBudgets, topology spread, resources and cloud presets for AWS EKS and GKE.
+        - kind: removed
+          description: Coturn, Adminer and the separate management/signal/relay Deployments. Their functionality now lives in netbird-server.
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 0.79.0
-    created: '2026-09-20T20:04:33.7752888+05:30'
-    description: Self-hosted NetBird (WireGuard-based overlay network) with built-in local user management, PostgreSQL and zero external IdP required.
+    created: "2026-09-20T20:04:33.7752888+05:30"
+    description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
+      local user management, PostgreSQL and zero external IdP required.
     digest: b5bfdd9ad84bb4c2de2319ba441eb7853932c2ce74e85306f82d8ea4c03c3feb
     home: https://netbird.io
     icon: https://avatars.githubusercontent.com/u/100464677
@@ -94,7 +168,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: v0.0.1-beta
-    created: '2026-09-20T20:04:33.774264+05:30'
+    created: "2026-09-20T20:04:33.774264+05:30"
     description: A Helm chart for deploying a self-hosted Netbird stack.
     digest: 43ef42b764675dd0ef79fa995bc26571d86162c0022a2b715661622ee3b1c72f
     icon: https://avatars.githubusercontent.com/u/100464677
@@ -105,15 +179,30 @@ entries:
     version: 0.1.0
   teleport:
   - annotations:
-      artifacthub.io/changes: "- kind: added\n  description: Initial release. Teleport Community Edition with standalone and HA modes.\n- kind: added\n  description: Standalone mode runs Auth and Proxy in one process on an SQLite backend.\n- kind: added\n  description: HA mode splits Auth and Proxy across replicas on a PostgreSQL backend.\n- kind: added\n  description: Kubernetes, application and database access, with the RBAC Kubernetes access requires.\n"
-      artifacthub.io/containsSecurityUpdates: 'false'
-      artifacthub.io/images: "- name: teleport\n  image: public.ecr.aws/gravitational/teleport-distroless:18.10.0\n"
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. Teleport Community Edition with standalone and HA modes.
+        - kind: added
+          description: Standalone mode runs Auth and Proxy in one process on an SQLite backend.
+        - kind: added
+          description: HA mode splits Auth and Proxy across replicas on a PostgreSQL backend.
+        - kind: added
+          description: Kubernetes, application and database access, with the RBAC Kubernetes access requires.
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/images: |
+        - name: teleport
+          image: public.ecr.aws/gravitational/teleport-distroless:18.10.0
       artifacthub.io/license: MIT
-      artifacthub.io/links: "- name: Teleport source (AGPL-3.0)\n  url: https://github.com/gravitational/teleport\n- name: Teleport documentation\n  url: https://goteleport.com/docs/\n"
+      artifacthub.io/links: |
+        - name: Teleport source (AGPL-3.0)
+          url: https://github.com/gravitational/teleport
+        - name: Teleport documentation
+          url: https://goteleport.com/docs/
     apiVersion: v2
     appVersion: 18.10.0
-    created: '2026-09-21T00:05:55.145881+05:30'
-    description: "Self-hosted Teleport Community Edition \xE2\u20AC\u201D SSH, Kubernetes, application and database access with short-lived certificates. Single-node or HA on PostgreSQL."
+    created: "2026-09-21T00:05:55.145881+05:30"
+    description: Self-hosted Teleport Community Edition â€” SSH, Kubernetes, application
+      and database access with short-lived certificates. Single-node or HA on PostgreSQL.
     digest: d9b7191186fa208c76c3f0dacde5c76e047353446f366db125435ede5abd2c23
     home: https://goteleport.com
     icon: https://goteleport.com/static/teleport-symbol-bimi.svg
@@ -137,14 +226,83 @@ entries:
     version: 0.1.0
   wazuh:
   - annotations:
-      artifacthub.io/changes: "- kind: added\n  description: Initial release. Wazuh indexer, manager and dashboard.\n- kind: added\n  description: Internal PKI generated at install time and preserved across upgrades, replacing the cert-generation script upstream requires you to run by hand.\n- kind: added\n  description: Credentials generated once and reused on upgrade, including the bcrypt hashes the indexer needs.\n"
-      artifacthub.io/images: "- name: wazuh-manager\n  image: wazuh/wazuh-manager:4.14.7\n- name: wazuh-indexer\n  image: wazuh/wazuh-indexer:4.14.7\n- name: wazuh-dashboard\n  image: wazuh/wazuh-dashboard:4.14.7\n"
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Traefik ingress now verifies the dashboard certificate via a ServersTransport pinning serverName and the chart CA. Without it Traefik dialled pod IPs, failed verification and returned 500 on every request.
+        - kind: fixed
+          description: The ingress only claims a TLS secret that something will actually create, instead of naming one that never exists and erroring on every reconcile.
+        - kind: added
+          description: Initial release. Wazuh indexer, manager and dashboard.
+        - kind: added
+          description: Internal PKI generated at install time and preserved across upgrades, replacing the cert-generation script upstream requires you to run by hand.
+        - kind: added
+          description: Credentials generated once and reused on upgrade, including the bcrypt hashes the indexer needs.
+      artifacthub.io/images: |
+        - name: wazuh-manager
+          image: wazuh/wazuh-manager:4.14.7
+        - name: wazuh-indexer
+          image: wazuh/wazuh-indexer:4.14.7
+        - name: wazuh-dashboard
+          image: wazuh/wazuh-dashboard:4.14.7
       artifacthub.io/license: MIT
-      artifacthub.io/links: "- name: Wazuh source (GPL-2.0)\n  url: https://github.com/wazuh/wazuh\n- name: Wazuh documentation\n  url: https://documentation.wazuh.com/\n"
+      artifacthub.io/links: |
+        - name: Wazuh source (GPL-2.0)
+          url: https://github.com/wazuh/wazuh
+        - name: Wazuh documentation
+          url: https://documentation.wazuh.com/
     apiVersion: v2
     appVersion: 4.14.7
-    created: '2026-09-21T21:31:31.4350331+05:30'
-    description: "Self-hosted Wazuh \xE2\u20AC\u201D open source XDR and SIEM. Indexer, manager and dashboard, with the internal PKI generated for you."
+    created: "2026-09-22T14:58:14.5855047+05:30"
+    description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager and
+      dashboard, with the internal PKI generated for you.
+    digest: d9f714588052e0e71ee095be325db35494597ffe04333bbcc90d4abe841f745c
+    home: https://wazuh.com
+    icon: https://avatars.githubusercontent.com/u/11178869
+    keywords:
+    - wazuh
+    - siem
+    - xdr
+    - security
+    - intrusion-detection
+    - log-analysis
+    - opensearch
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: wazuh
+    sources:
+    - https://github.com/wazuh/wazuh
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.1.tgz
+    version: 0.1.1
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. Wazuh indexer, manager and dashboard.
+        - kind: added
+          description: Internal PKI generated at install time and preserved across upgrades, replacing the cert-generation script upstream requires you to run by hand.
+        - kind: added
+          description: Credentials generated once and reused on upgrade, including the bcrypt hashes the indexer needs.
+      artifacthub.io/images: |
+        - name: wazuh-manager
+          image: wazuh/wazuh-manager:4.14.7
+        - name: wazuh-indexer
+          image: wazuh/wazuh-indexer:4.14.7
+        - name: wazuh-dashboard
+          image: wazuh/wazuh-dashboard:4.14.7
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Wazuh source (GPL-2.0)
+          url: https://github.com/wazuh/wazuh
+        - name: Wazuh documentation
+          url: https://documentation.wazuh.com/
+    apiVersion: v2
+    appVersion: 4.14.7
+    created: "2026-09-22T14:58:14.5845026+05:30"
+    description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager and
+      dashboard, with the internal PKI generated for you.
     digest: dc144c263b6abb50506fb5deb74aa1416bf66121af3b655403da1503f0c8f26b
     home: https://wazuh.com
     icon: https://avatars.githubusercontent.com/u/11178869
@@ -167,4 +325,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: '2026-09-21T21:31:31.5035809+05:30'
+generated: "2026-09-22T14:58:14.5830008+05:30"

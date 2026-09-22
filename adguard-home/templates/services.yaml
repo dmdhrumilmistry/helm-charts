@@ -1,0 +1,117 @@
+{{- $fullName := include "adguard.fullname" . -}}
+{{/*
+DNS gets its own Service so it can be a LoadBalancer on the LAN while the
+web UI stays internal. This is the address your router's DHCP points at.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}-dns
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "adguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+  {{- with .Values.dns.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.dns.service.type }}
+  {{- with .Values.dns.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.dns.service.loadBalancerClass }}
+  loadBalancerClass: {{ . | quote }}
+  {{- end }}
+  {{- if and (eq .Values.dns.service.type "LoadBalancer") .Values.dns.service.externalTrafficPolicy }}
+  {{- /*
+  Local preserves the querying client's address. Without it every query
+  appears to come from a cluster node, so per-client rules never match
+  and the statistics are meaningless.
+  */}}
+  externalTrafficPolicy: {{ .Values.dns.service.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    - name: dns-udp
+      port: {{ .Values.dns.port }}
+      targetPort: dns-udp
+      protocol: UDP
+    - name: dns-tcp
+      port: {{ .Values.dns.port }}
+      targetPort: dns-tcp
+      protocol: TCP
+  selector:
+    {{- include "adguard.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "adguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- with .Values.web.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.web.service.type }}
+  {{- with .Values.web.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.web.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "adguard.selectorLabels" . | nindent 4 }}
+{{- if .Values.ingress.enabled }}
+---
+{{- $host := required "ingress.host is required when ingress.enabled is true" .Values.ingress.host -}}
+{{- $ann := deepCopy .Values.ingress.annotations -}}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.clusterIssuer -}}
+{{- $_ := set $ann "cert-manager.io/cluster-issuer" .Values.ingress.tls.clusterIssuer -}}
+{{- end -}}
+{{- $tlsSecret := .Values.ingress.tls.secretName -}}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.clusterIssuer (not $tlsSecret) -}}
+{{- $tlsSecret = printf "%s-tls" $fullName -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "adguard.labels" . | nindent 4 }}
+  {{- if $ann }}
+  annotations:
+    {{- toYaml $ann | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- /*
+  Only claim a TLS secret something will actually create, otherwise the
+  controller logs a missing-secret error on every reconcile.
+  */}}
+  {{- if and .Values.ingress.tls.enabled $tlsSecret }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $tlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  name: http
+{{- end }}

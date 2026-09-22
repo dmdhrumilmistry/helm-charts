@@ -4,7 +4,7 @@ description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager an
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.1.0
+version: 0.1.1
 
 # Version of Wazuh this chart deploys by default.
 appVersion: "4.14.7"
@@ -48,6 +48,10 @@ annotations:
     - name: Wazuh documentation
       url: https://documentation.wazuh.com/
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Traefik ingress now verifies the dashboard certificate via a ServersTransport pinning serverName and the chart CA. Without it Traefik dialled pod IPs, failed verification and returned 500 on every request.
+    - kind: fixed
+      description: The ingress only claims a TLS secret that something will actually create, instead of naming one that never exists and erroring on every reconcile.
     - kind: added
       description: Initial release. Wazuh indexer, manager and dashboard.
     - kind: added

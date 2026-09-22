@@ -1,0 +1,47 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "adguard.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "adguard.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: {{ include "adguard.image" . }}
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          WEB="http://{{ include "adguard.fullname" . }}:{{ .Values.web.service.port }}"
+          DNS="{{ include "adguard.fullname" . }}-dns"
+
+          echo "==> web UI is past the setup wizard"
+          code=$(wget -q -S -O /dev/null "$WEB/" 2>&1 | awk '/HTTP\//{print $2}' | tail -1)
+          # 302 to the login means configured; the wizard would serve 200
+          # on /install.html instead.
+          [ "$code" = "302" ] || [ "$code" = "200" ] \
+            && echo "    ok (HTTP $code)" \
+            || { echo "    FAILED: got HTTP $code"; exit 1; }
+          {{- range .Values.rewrites }}
+          {{- $probe := .domain | replace "*." "helmtest." }}
+
+          echo "==> rewrite {{ .domain }} resolves to {{ .answer }}"
+          got=$(nslookup {{ $probe }} "$DNS" 2>/dev/null | awk '/^Address: /{a=$2} END{print a}')
+          [ "$got" = "{{ .answer }}" ] \
+            && echo "    ok ({{ $probe }} -> $got)" \
+            || { echo "    FAILED: {{ $probe }} resolved to '$got', expected {{ .answer }}"; exit 1; }
+          {{- end }}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+{{- end }}
