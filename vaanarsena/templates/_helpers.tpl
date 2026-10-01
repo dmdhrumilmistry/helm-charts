@@ -51,6 +51,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- .Values.ca.existingSecret | default (printf "%s-ca-key" (include "vs.fullname" .)) -}}
 {{- end }}
 
+{{- define "vs.manifestsConfigMap" -}}
+{{- .Values.manifests.existingConfigMap | default (printf "%s-manifests" (include "vs.fullname" .)) -}}
+{{- end }}
+
+{{- define "vs.manifestsEnabled" -}}
+{{- if or .Values.manifests.files .Values.manifests.existingConfigMap }}true{{ end -}}
+{{- end }}
+
 {{- define "vs.postgresName" -}}
 {{- printf "%s-postgresql" (include "vs.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}

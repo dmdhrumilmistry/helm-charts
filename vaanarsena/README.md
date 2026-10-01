@@ -75,6 +75,45 @@ helm upgrade vaanarsena dmdhrumilmistry/vaanarsena -n vaanarsena --reuse-values 
 Setup for each platform is in the
 [VaanarSena platform guide](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/platforms.md).
 
+## Configuration as code
+
+Groups (static and smart), policies (including custom Apple, Windows and
+Android payloads) and blueprints can live in your Helm values. The chart
+renders them into a ConfigMap, and the server applies them on start and
+every `manifests.interval`:
+
+```yaml
+manifests:
+  owner: helm
+  prune: true               # remove what you delete from these values
+  files:
+    fleet.yaml: |
+      apiVersion: vaanarsena.io/v1
+      kind: Group
+      metadata: {name: ios-needs-update}
+      spec:
+        kind: smart
+        rules:
+          match: all
+          conditions:
+            - {field: platform, op: in, value: [ios, ipados]}
+            - {field: osVersion, op: version_lt, value: "17.0"}
+      ---
+      apiVersion: vaanarsena.io/v1
+      kind: Blueprint
+      metadata: {name: ios-update-push}
+      spec:
+        groups: [ios-needs-update]
+        onEnroll:
+          - {type: os_update}
+```
+
+Or keep the files in your own ConfigMap (`manifests.existingConfigMap`), for
+example one Argo CD or Flux syncs from Git. Updates reach the running pod
+without a restart. Validation errors are logged and leave the last good
+state in place. Format reference:
+[manifests.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/manifests.md).
+
 ## Values
 
 | Key | Default | Description |
@@ -101,6 +140,9 @@ Setup for each platform is in the
 | `networkPolicy.enabled` | `true` | Only the ingress controller reaches the server; only the server reaches PostgreSQL. |
 | `networkPolicy.ingressNamespace` | `ingress-nginx` | Namespace of the ingress controller. |
 | `podDisruptionBudget.enabled` | `false` | PDB for multi-replica installs. |
+| `manifests.files` | `{}` | File name to manifest YAML; rendered into a ConfigMap and reconciled. |
+| `manifests.existingConfigMap` | `""` | Use your own ConfigMap of manifests instead. |
+| `manifests.interval` / `owner` / `prune` | `5m` / `helm` / `false` | Reconcile interval, owner label, and whether to delete resources removed from the manifests. |
 | `extraEnv` | `[]` | Extra `VS_*` variables, see the [configuration reference](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/configuration.md). |
 | `resources`, `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints` | | Standard scheduling controls. |
 

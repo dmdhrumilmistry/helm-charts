@@ -71,6 +71,30 @@ google:
   adminSubject: ""
   customerId: my_customer
 
+# Declarative configuration (GitOps). Each entry is a VaanarSena manifest
+# (Group, Policy or Blueprint) as YAML. They are rendered into a ConfigMap
+# that the server applies on start and every manifests.interval. See
+# https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/manifests.md
+manifests:
+  # -- Map of file name to manifest content.
+  files: {}
+  #   fleet.yaml: |
+  #     apiVersion: vaanarsena.io/v1
+  #     kind: Group
+  #     metadata: {name: all-corporate}
+  #     spec:
+  #       kind: smart
+  #       rules:
+  #         match: all
+  #         conditions: [{field: ownership, op: eq, value: corporate}]
+  # -- Or mount an existing ConfigMap of manifests instead of files.
+  existingConfigMap: ""
+  interval: 5m
+  # -- Owner label on applied resources; scopes prune.
+  owner: helm
+  # -- Delete resources of this owner that are removed from the manifests.
+  prune: false
+
 # -- Extra environment variables for the server container.
 extraEnv: []
 

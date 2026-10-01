@@ -226,6 +226,47 @@ entries:
     version: 0.1.0
   vaanarsena:
   - annotations:
+      artifacthub.io/changes: |-
+        - kind: added
+          description: manifests value. Groups, policies and blueprints as YAML in Helm values, rendered to a ConfigMap and reconciled by the server (GitOps), with owner-scoped prune.
+        - kind: changed
+          description: Deploys VaanarSena 0.2.0 (custom payloads, static and smart groups, blueprints, declarative apply).
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: ghcr.io/dmdhrumilmistry/vaanarsena:0.2.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-10-02T04:32:25.0909558+05:30"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: f76220f1e03c134e929fd46d58336954251e00e92aaaf9becded171e93ce3b67
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
       artifacthub.io/changes: |
         - kind: added
           description: Initial release. Server, bundled PostgreSQL and ingress with client-certificate forwarding for Windows and Linux devices.
@@ -242,7 +283,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-01T21:39:00.6124324+05:30"
+    created: "2026-10-02T04:32:25.0904301+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: be447d98113eb970b6082cfd2d1b37beb413d9023b874fd814d41e93ac05313c
@@ -367,4 +408,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-01T21:39:00.6118992+05:30"
+generated: "2026-10-02T04:32:25.0863374+05:30"

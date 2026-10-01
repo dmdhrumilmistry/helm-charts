@@ -110,6 +110,16 @@ spec:
             - name: VS_GOOGLE_CUSTOMER_ID
               value: {{ .Values.google.customerId | quote }}
             {{- end }}
+            {{- if include "vs.manifestsEnabled" . }}
+            - name: VS_MANIFEST_DIR
+              value: /etc/vaanarsena/manifests
+            - name: VS_MANIFEST_INTERVAL
+              value: {{ .Values.manifests.interval | quote }}
+            - name: VS_MANIFEST_OWNER
+              value: {{ .Values.manifests.owner | quote }}
+            - name: VS_MANIFEST_PRUNE
+              value: {{ .Values.manifests.prune | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -117,6 +127,13 @@ spec:
             - name: ca
               mountPath: /etc/vaanarsena/ca
               readOnly: true
+            {{- if include "vs.manifestsEnabled" . }}
+            # Not a subPath mount, so ConfigMap updates reach the pod without a
+            # restart; the server picks them up on its next interval.
+            - name: manifests
+              mountPath: /etc/vaanarsena/manifests
+              readOnly: true
+            {{- end }}
             {{- if .Values.apple.enabled }}
             - name: apns
               mountPath: /etc/vaanarsena/apns
@@ -152,6 +169,11 @@ spec:
           secret:
             secretName: {{ include "vs.caKeySecret" . }}
             defaultMode: 0400
+        {{- if include "vs.manifestsEnabled" . }}
+        - name: manifests
+          configMap:
+            name: {{ include "vs.manifestsConfigMap" . }}
+        {{- end }}
         {{- if .Values.apple.enabled }}
         - name: apns
           secret:
