@@ -1,0 +1,45 @@
+apiVersion: v2
+name: vaanarsena
+description: Self-hosted VaanarSena - open source device management (MDM) for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of VaanarSena this chart deploys by default.
+appVersion: "0.1.0"
+
+home: https://github.com/dmdhrumilmistry/VaanarSena
+sources:
+  - https://github.com/dmdhrumilmistry/VaanarSena
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - mdm
+  - device-management
+  - byod
+  - apple-mdm
+  - windows-mdm
+  - android-enterprise
+  - linux
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # The chart is MIT; VaanarSena itself is Apache-2.0.
+  artifacthub.io/license: MIT
+  artifacthub.io/images: |
+    - name: vaanarsena
+      image: ghcr.io/dmdhrumilmistry/vaanarsena:0.1.0
+    - name: postgres
+      image: postgres:17-alpine
+  artifacthub.io/links: |
+    - name: VaanarSena source (Apache-2.0)
+      url: https://github.com/dmdhrumilmistry/VaanarSena
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. Server, bundled PostgreSQL and ingress with client-certificate forwarding for Windows and Linux devices.
+    - kind: added
+      description: Secret key, admin password, database password and device CA generated once and preserved across upgrades.

@@ -1,0 +1,172 @@
+# -- Public DNS name devices and admins use, e.g. mdm.example.com. Required.
+# Devices are told to reach the server at https://<publicHost>, so it must
+# resolve from wherever your devices are and carry a trusted certificate.
+publicHost: ""
+
+# -- Override the public URL entirely (defaults to https://<publicHost>).
+publicUrl: ""
+
+# -- Organisation name shown in enrollment profiles, certificates and the console.
+orgName: VaanarSena
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ghcr.io
+  repository: dmdhrumilmistry/vaanarsena
+  # -- Defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+
+# -- Replicas. The server is stateless; run 2+ for availability.
+replicaCount: 1
+
+# -- Use an existing Secret instead of the generated one. It must contain
+# secretKey, adminPassword and databaseUrl.
+existingSecret: ""
+
+# -- At least 32 characters. Generated once and kept across upgrades when
+# empty. BACK IT UP: without it the stored data cannot be decrypted.
+secretKey: ""
+
+admin:
+  # -- Bootstrap admin, created only when the database has no users.
+  email: admin@example.com
+  # -- Generated when empty; read it back with the command in NOTES.
+  password: ""
+
+# Device certificate authority. Generated once (RSA, 20 years) and kept across
+# upgrades. It is shared with the ingress so it can request client
+# certificates. Supply your own with existingCASecret (keys ca.crt, ca.key).
+ca:
+  existingSecret: ""
+  validityDays: 7300
+
+logLevel: info
+sessionTTL: 12h
+
+# Apple MDM push certificate. Create a Secret with keys apns.crt and apns.key:
+#   kubectl create secret generic vaanarsena-apns --from-file=apns.crt --from-file=apns.key
+apple:
+  enabled: false
+  existingSecret: ""
+  # -- Push topic; read from the certificate when empty.
+  topic: ""
+
+# Google service account for Android (AMAPI) and ChromeOS (Admin SDK).
+#   kubectl create secret generic vaanarsena-google --from-file=google.json=key.json
+google:
+  existingSecret: ""
+  projectId: ""
+  # -- AMAPI enterprise, e.g. enterprises/LC01abcdef. Enables Android.
+  androidEnterprise: ""
+  # -- Workspace admin to impersonate. Enables ChromeOS.
+  adminSubject: ""
+  customerId: my_customer
+
+# -- Extra environment variables for the server container.
+extraEnv: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  # -- TLS secret for publicHost. With cert-manager, add its annotation
+  # above and the certificate is created for you.
+  tls:
+    secretName: ""
+  # -- Ask devices for a TLS client certificate at the ingress and forward it
+  # in the ssl-client-cert header. Needed for Windows and Linux management
+  # behind ingress-nginx. Apple devices authenticate by request signature and
+  # do not need this.
+  clientCertificates: true
+
+# Bundled PostgreSQL. Disable to use externalDatabase.
+postgresql:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: postgres
+    tag: 17-alpine
+  database: vaanarsena
+  username: vaanarsena
+  # -- Generated when empty.
+  password: ""
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+externalDatabase:
+  # -- Full connection string, e.g. postgres://user:pass@host:5432/db?sslmode=require
+  url: ""
+  # -- Or read it from a Secret key instead.
+  existingSecret: ""
+  existingSecretKey: databaseUrl
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Restrict traffic so only the ingress controller reaches the server and only
+# the server reaches PostgreSQL. Recommended whenever
+# ingress.clientCertificates is on. Needs a CNI that enforces NetworkPolicy.
+networkPolicy:
+  enabled: true
+  # -- Namespace the ingress controller runs in.
+  ingressNamespace: ingress-nginx
+  # -- Optionally narrow to the controller pods.
+  ingressPodLabels: {}
+
+tests:
+  enabled: true

@@ -1,0 +1,182 @@
+{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.url) (not .Values.externalDatabase.existingSecret) (not .Values.existingSecret) }}
+{{- fail "set postgresql.enabled=true, externalDatabase.url or externalDatabase.existingSecret" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vs.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vs.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "vs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Restart when generated secrets or the CA change.
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "vs.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "vs.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          image: {{ include "vs.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: VS_LISTEN_ADDR
+              value: ":8080"
+            - name: VS_PUBLIC_URL
+              value: {{ include "vs.publicUrl" . | quote }}
+            - name: VS_ORG_NAME
+              value: {{ .Values.orgName | quote }}
+            - name: VS_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: VS_SESSION_TTL
+              value: {{ .Values.sessionTTL | quote }}
+            - name: VS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vs.secretName" . }}
+                  key: secretKey
+            - name: VS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if and (not .Values.postgresql.enabled) .Values.externalDatabase.existingSecret }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretKey }}
+                  {{- else }}
+                  name: {{ include "vs.secretName" . }}
+                  key: databaseUrl
+                  {{- end }}
+            - name: VS_BOOTSTRAP_ADMIN_EMAIL
+              value: {{ .Values.admin.email | quote }}
+            - name: VS_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vs.secretName" . }}
+                  key: adminPassword
+            - name: VS_CA_CERT_FILE
+              value: /etc/vaanarsena/ca/ca.crt
+            - name: VS_CA_KEY_FILE
+              value: /etc/vaanarsena/ca/ca.key
+            {{- if .Values.ingress.enabled }}
+            # Behind the ingress: trust its forwarded client IP and certificate.
+            - name: VS_TRUST_PROXY
+              value: "true"
+            {{- if .Values.ingress.clientCertificates }}
+            - name: VS_CLIENT_CERT_HEADER
+              value: ssl-client-cert
+            {{- end }}
+            {{- end }}
+            {{- if .Values.apple.enabled }}
+            - name: VS_APNS_CERT_FILE
+              value: /etc/vaanarsena/apns/apns.crt
+            - name: VS_APNS_KEY_FILE
+              value: /etc/vaanarsena/apns/apns.key
+            {{- with .Values.apple.topic }}
+            - name: VS_APNS_TOPIC
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.google.existingSecret }}
+            - name: VS_GOOGLE_CREDENTIALS_FILE
+              value: /etc/vaanarsena/google/google.json
+            - name: VS_GOOGLE_PROJECT_ID
+              value: {{ .Values.google.projectId | quote }}
+            - name: VS_ANDROID_ENTERPRISE
+              value: {{ .Values.google.androidEnterprise | quote }}
+            - name: VS_GOOGLE_ADMIN_SUBJECT
+              value: {{ .Values.google.adminSubject | quote }}
+            - name: VS_GOOGLE_CUSTOMER_ID
+              value: {{ .Values.google.customerId | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: ca
+              mountPath: /etc/vaanarsena/ca
+              readOnly: true
+            {{- if .Values.apple.enabled }}
+            - name: apns
+              mountPath: /etc/vaanarsena/apns
+              readOnly: true
+            {{- end }}
+            {{- if .Values.google.existingSecret }}
+            - name: google
+              mountPath: /etc/vaanarsena/google
+              readOnly: true
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      volumes:
+        - name: ca
+          secret:
+            secretName: {{ include "vs.caKeySecret" . }}
+            defaultMode: 0400
+        {{- if .Values.apple.enabled }}
+        - name: apns
+          secret:
+            secretName: {{ required "apple.existingSecret is required when apple.enabled" .Values.apple.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.google.existingSecret }}
+        - name: google
+          secret:
+            secretName: {{ .Values.google.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

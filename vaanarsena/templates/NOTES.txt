@@ -1,0 +1,33 @@
+VaanarSena is starting at {{ include "vs.publicUrl" . }}
+
+1. Sign in as {{ .Values.admin.email }}. The password is:
+
+   kubectl get secret -n {{ .Release.Namespace }} {{ include "vs.secretName" . }} \
+     -o jsonpath='{.data.adminPassword}' | base64 -d; echo
+
+   Change it under Account after the first login.
+
+2. BACK UP these Secrets now. Losing them makes the database unreadable or
+   forces every device to re-enroll. They are marked helm.sh/resource-policy=keep
+   and survive `helm uninstall`:
+
+   kubectl get secret -n {{ .Release.Namespace }} {{ include "vs.secretName" . }} {{ include "vs.caKeySecret" . }} -o yaml > vaanarsena-secrets-backup.yaml
+
+{{- if not .Values.ingress.enabled }}
+
+3. The ingress is disabled. Devices need HTTPS on {{ .Values.publicHost | default "your public host" }};
+   expose the "{{ include "vs.fullname" . }}" Service through your own TLS proxy.
+{{- else if not .Values.ingress.tls.secretName }}
+
+3. The ingress expects a TLS certificate in Secret {{ include "vs.fullname" . }}-tls.
+   With cert-manager, add to ingress.annotations:
+     cert-manager.io/cluster-issuer: <your-issuer>
+{{- end }}
+
+Platforms enabled by this release:
+  Windows, Linux : yes
+  Apple          : {{ if .Values.apple.enabled }}yes{{ else }}no (set apple.enabled and apple.existingSecret){{ end }}
+  Android        : {{ if and .Values.google.existingSecret .Values.google.androidEnterprise }}yes{{ else }}no (set google.existingSecret and google.androidEnterprise){{ end }}
+  ChromeOS       : {{ if and .Values.google.existingSecret .Values.google.adminSubject }}yes{{ else }}no (set google.existingSecret and google.adminSubject){{ end }}
+
+Docs: https://github.com/dmdhrumilmistry/VaanarSena/tree/main/docs
