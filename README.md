@@ -18,7 +18,7 @@ helm search repo dmdhrumilmistry
 | [falco](falco/) | 0.1.0 | 0.45.0 | [Falco](https://falco.org) runtime security, wrapping the official Apache-2.0 chart with opinionated defaults |
 | [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
 | [vaanarsena](vaanarsena/) | 0.4.0 | 0.3.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
-| [vishwakarma](vishwakarma/) | 0.2.0 | 0.2.0 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
+| [vishwakarma](vishwakarma/) | 0.3.0 | 0.3.0 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
 
 ### netbird
 

@@ -73,6 +73,18 @@ sandboxes:
   # this, plus the binder module on the nodes (see the Android docs). A
   # privileged container can still take over its node.
   allowPrivilegedTemplates: false
+  # -- Offer the "macOS on Linux" template (Docker-OSX: macOS under QEMU on a
+  # Linux node). It needs /dev/kvm on the nodes (KubeVirt's device plugin
+  # hands it out) and is NOT licensed by Apple: the macOS license only
+  # permits macOS on Apple hardware. Turning this on is your decision.
+  macosOnLinux: false
+  # -- Android screen sidecar image; defaults to <image.repository>-android-screen:<tag>.
+  androidScreenImage: ""
+  # -- A redroid image with Google Play that you built with
+  # images/android-playstore/build.sh (Google's apps cannot be redistributed,
+  # so there is no public image). Setting it adds the "Android 12 with Play
+  # Store" template. Nodes must be able to pull it.
+  androidPlayStoreImage: ""
   allowNodePort: true
   # -- StorageClass for persistent /data volumes; empty uses the default.
   storageClass: ""

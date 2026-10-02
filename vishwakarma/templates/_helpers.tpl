@@ -102,6 +102,18 @@ live Secret on every upgrade so the admin password and API token stay put.
 {{- index .root.Values._vkGenerated .key -}}
 {{- end }}
 
+{{/* The Android screen sidecar, released with the server. */}}
+{{- define "vk.androidScreenImage" -}}
+{{- if .Values.sandboxes.androidScreenImage -}}
+{{- .Values.sandboxes.androidScreenImage -}}
+{{- else -}}
+{{- $registry := .Values.image.registry | default .Values.global.imageRegistry -}}
+{{- $repo := printf "%s-android-screen" .Values.image.repository -}}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- if $registry -}}{{ printf "%s/%s:%s" $registry $repo $tag }}{{- else -}}{{ printf "%s:%s" $repo $tag }}{{- end -}}
+{{- end -}}
+{{- end }}
+
 {{- define "vk.simulatorName" -}}
 {{- printf "%s-mac-simulator" (include "vk.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
@@ -130,6 +142,9 @@ live Secret on every upgrade so the admin password and API token stay put.
   "allowCustomImages" $s.allowCustomImages
   "allowPrivileged" $s.allowPrivileged
   "allowPrivilegedTemplates" $s.allowPrivilegedTemplates
+  "macosOnLinux" $s.macosOnLinux
+  "androidScreenImage" (include "vk.androidScreenImage" .)
+  "androidPlayStoreImage" $s.androidPlayStoreImage
   "allowNodePort" $s.allowNodePort
   "storageClass" $s.storageClass
   "defaults" $s.defaults

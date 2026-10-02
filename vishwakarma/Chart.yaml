@@ -4,10 +4,10 @@ description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernete
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.2.0
+version: 0.3.0
 
 # Version of Vishwakarma this chart deploys by default.
-appVersion: "0.2.0"
+appVersion: "0.3.0"
 
 home: https://github.com/dmdhrumilmistry/vishwakarma
 sources:
@@ -34,14 +34,20 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vishwakarma
-      image: ghcr.io/dmdhrumilmistry/vishwakarma:0.2.0
+      image: ghcr.io/dmdhrumilmistry/vishwakarma:0.3.0
+    - name: android-screen
+      image: ghcr.io/dmdhrumilmistry/vishwakarma-android-screen:0.3.0
   artifacthub.io/links: |
     - name: Vishwakarma source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/vishwakarma
   artifacthub.io/changes: |
     - kind: added
-      description: macOS sandboxes on Mac hosts through the Tart-based agent (macos.agents), with SSH terminal, VNC and port forwarding.
+      description: Screen tab in the console (noVNC) for Android, KubeVirt VMs and macOS VMs.
     - kind: added
-      description: In-cluster macOS agent simulator (macos.simulator.enabled) for trying the macOS flow on Linux clusters.
+      description: Android sandboxes stream their screen to the browser by default through a scrcpy sidecar.
     - kind: added
-      description: Android 12 template (redroid), allowed with sandboxes.allowPrivilegedTemplates.
+      description: Opt-in macOS on Linux template (Docker-OSX, needs /dev/kvm), sandboxes.macosOnLinux.
+    - kind: added
+      description: Android 12 with Play Store template for a self-built image, sandboxes.androidPlayStoreImage.
+    - kind: fixed
+      description: Copy and paste in the console over plain HTTP (copy buttons, terminal, Android screen).

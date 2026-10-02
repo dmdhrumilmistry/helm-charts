@@ -36,8 +36,15 @@ sandboxes:
 ```
 
 The Android 12 template (redroid) needs a privileged container and the
-`binder_linux` kernel module on the nodes. Connect with `adb connect
-<node>:<nodePort>` and scrcpy. See
+`binder_linux` kernel module on the nodes. Its screen shows in the console's
+Screen tab through a scrcpy sidecar, with copy and paste;
+`adb connect <node>:<nodePort>` and scrcpy work too.
+
+For Google Play, build the image yourself (Google's apps cannot be
+redistributed) with `images/android-playstore/build.sh` from the
+Vishwakarma repository, make it pullable by your nodes and set
+`sandboxes.androidPlayStoreImage`; the "Android 12 with Play Store" template
+appears. See
 [docs/android.md](https://github.com/dmdhrumilmistry/vishwakarma/blob/main/docs/android.md).
 
 ## macOS and the iOS Simulator
@@ -54,7 +61,11 @@ macos:
 ```
 
 For k3s inside Lima, Colima or Rancher Desktop on the same Mac, use
-`http://host.lima.internal:8484`. To try the flow on a Linux cluster without
+`http://host.lima.internal:8484`.
+
+On Linux nodes with `/dev/kvm`, `sandboxes.macosOnLinux=true` adds a
+Docker-OSX template (macOS under QEMU). Apple's license only permits macOS
+on Apple hardware, so this is off by default. To try the flow on a Linux cluster without
 a Mac, set `macos.simulator.enabled=true`: an in-cluster agent simulates VMs
 (no real guest) and publishes forwarded ports as NodePorts 30500-30509. See
 [docs/macos.md](https://github.com/dmdhrumilmistry/vishwakarma/blob/main/docs/macos.md).
@@ -107,6 +118,9 @@ Traefik).
 | `sandboxes.allowCustomImages` | `true` | Any image, not only templates |
 | `sandboxes.allowPrivileged` | `false` | Privileged containers; they can take over the node |
 | `sandboxes.allowPrivilegedTemplates` | `false` | Privileged only from templates marked so (Android) |
+| `sandboxes.macosOnLinux` | `false` | Docker-OSX template; needs `/dev/kvm`, not licensed by Apple |
+| `sandboxes.androidScreenImage` | release image | Android screen sidecar |
+| `sandboxes.androidPlayStoreImage` | | Your Google Play redroid build; adds the Play Store template |
 | `sandboxes.allowNodePort` | `true` | Expose sandbox ports on every node |
 | `sandboxes.defaults` / `limits` | `1`, `1Gi`, `10Gi` / `4`, `8Gi`, `50Gi` | CPU, memory, disk |
 | `sandboxes.network.isolate` | `true` | Per-sandbox NetworkPolicy |
