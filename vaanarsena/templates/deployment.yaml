@@ -85,7 +85,7 @@ spec:
               value: "true"
             {{- if .Values.ingress.clientCertificates }}
             - name: VS_CLIENT_CERT_HEADER
-              value: ssl-client-cert
+              value: {{ include "vs.clientCertHeader" . | quote }}
             {{- end }}
             {{- end }}
             {{- if .Values.apple.enabled }}

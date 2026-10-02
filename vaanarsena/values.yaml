@@ -105,16 +105,20 @@ service:
 
 ingress:
   enabled: true
-  className: nginx
+  # -- nginx (ingress-nginx), traefik (the k3s default) or other. Selects how
+  # client certificates are requested and forwarded. With "other", configure
+  # forwarding yourself and set VS_CLIENT_CERT_HEADER through extraEnv.
+  controller: nginx
+  # -- IngressClass; defaults to the controller name (nginx or traefik).
+  className: ""
   annotations: {}
   # -- TLS secret for publicHost. With cert-manager, add its annotation
   # above and the certificate is created for you.
   tls:
     secretName: ""
   # -- Ask devices for a TLS client certificate at the ingress and forward it
-  # in the ssl-client-cert header. Needed for Windows and Linux management
-  # behind ingress-nginx. Apple devices authenticate by request signature and
-  # do not need this.
+  # to the server. Needed for Windows and Linux management behind an ingress.
+  # Apple devices authenticate by request signature and do not need this.
   clientCertificates: true
 
 # Bundled PostgreSQL. Disable to use externalDatabase.
@@ -187,8 +191,9 @@ podDisruptionBudget:
 # ingress.clientCertificates is on. Needs a CNI that enforces NetworkPolicy.
 networkPolicy:
   enabled: true
-  # -- Namespace the ingress controller runs in.
-  ingressNamespace: ingress-nginx
+  # -- Namespace the ingress controller runs in. Defaults to ingress-nginx for
+  # controller nginx and kube-system for traefik (k3s).
+  ingressNamespace: ""
   # -- Optionally narrow to the controller pods.
   ingressPodLabels: {}
 

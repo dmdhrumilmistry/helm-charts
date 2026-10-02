@@ -17,7 +17,7 @@ helm search repo dmdhrumilmistry
 | [wazuh](wazuh/) | 0.1.1 | 4.14.7 | Self-hosted [Wazuh](https://wazuh.com) XDR and SIEM: indexer, manager and dashboard, with the internal PKI generated for you |
 | [falco](falco/) | 0.1.0 | 0.45.0 | [Falco](https://falco.org) runtime security, wrapping the official Apache-2.0 chart with opinionated defaults |
 | [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
-| [vaanarsena](vaanarsena/) | 0.2.0 | 0.2.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
+| [vaanarsena](vaanarsena/) | 0.3.0 | 0.2.1 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
 
 ### netbird
 
@@ -135,7 +135,8 @@ requests and forwards device client certificates, so Windows and Linux
 devices can authenticate behind it. The secret key, admin password and
 device CA are generated on first install and preserved on upgrade. Groups,
 policies and blueprints can be kept in the `manifests:` value, which the server
-reconciles live (GitOps). Apple,
+reconciles live (GitOps). On k3s, add `--set ingress.controller=traefik` to
+use the bundled Traefik instead of ingress-nginx. Apple,
 Android and ChromeOS are enabled by pointing the chart at Secrets holding
 their credentials. See the [chart README](vaanarsena/README.md).
 

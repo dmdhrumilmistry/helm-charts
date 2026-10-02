@@ -1,4 +1,5 @@
 {{- if .Values.ingress.enabled }}
+{{- $ctrl := include "vs.ingressController" . }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,6 +8,7 @@ metadata:
   labels:
     {{- include "vs.labels" . | nindent 4 }}
   annotations:
+    {{- if eq $ctrl "nginx" }}
     nginx.ingress.kubernetes.io/proxy-body-size: "16m"
     {{- if .Values.ingress.clientCertificates }}
     # Request (but do not require) a device certificate issued by the
@@ -17,11 +19,20 @@ metadata:
     nginx.ingress.kubernetes.io/auth-tls-verify-depth: "1"
     nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true"
     {{- end }}
+    {{- else if eq $ctrl "traefik" }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- if .Values.ingress.clientCertificates }}
+    # See templates/traefik.yaml: request client certificates and forward them.
+    traefik.ingress.kubernetes.io/router.tls.options: {{ printf "%s-%s-client-certs@kubernetescrd" .Release.Namespace (include "vs.fullname" .) | quote }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-%s-client-cert@kubernetescrd" .Release.Namespace (include "vs.fullname" .) | quote }}
+    {{- end }}
+    {{- end }}
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  {{- with .Values.ingress.className }}
+  {{- with (.Values.ingress.className | default (ternary $ctrl "" (ne $ctrl "other"))) }}
   ingressClassName: {{ . }}
   {{- end }}
   tls:

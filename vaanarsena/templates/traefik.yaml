@@ -1,0 +1,30 @@
+{{- if and .Values.ingress.enabled .Values.ingress.clientCertificates (eq (include "vs.ingressController" .) "traefik") }}
+# Traefik: ask every client for a certificate without requiring or verifying
+# one. Windows and Linux devices present their VaanarSena identity; browsers
+# and Apple devices present none. The handshake still proves possession of
+# the key, and VaanarSena verifies the chain against its own CA.
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  name: {{ include "vs.fullname" . }}-client-certs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vs.labels" . | nindent 4 }}
+spec:
+  minVersion: VersionTLS12
+  clientAuth:
+    clientAuthType: RequestClientCert
+---
+# Forward the certificate in X-Forwarded-Tls-Client-Cert. The middleware
+# removes any value the client sent itself, so the header can be trusted.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "vs.fullname" . }}-client-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vs.labels" . | nindent 4 }}
+spec:
+  passTLSClientCert:
+    pem: true
+{{- end }}

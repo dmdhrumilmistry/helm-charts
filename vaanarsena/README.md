@@ -27,11 +27,32 @@ first install, and preserves them on upgrade.
       cert-manager.io/cluster-issuer: letsencrypt
   ```
 
-- **ingress-nginx**, if you manage Windows or Linux devices behind the ingress
-  (the default). Those devices authenticate with a TLS client certificate;
-  the chart configures the ingress to request one, check it against the
-  device CA, and forward it to the server. Apple devices sign their requests
-  instead and work behind any ingress.
+- **An ingress controller that forwards client certificates**, if you manage
+  Windows or Linux devices behind the ingress (the default). Those devices
+  authenticate with a TLS client certificate; the chart configures the
+  ingress to request one and forward it to the server. Apple devices sign
+  their requests instead and work behind any ingress. Supported:
+  - **ingress-nginx** (`ingress.controller: nginx`, the default)
+  - **Traefik**, the k3s default (`ingress.controller: traefik`): the chart
+    adds a TLSOption that requests client certificates and a
+    passTLSClientCert middleware
+
+### k3s
+
+```bash
+helm install vaanarsena dmdhrumilmistry/vaanarsena \
+  --namespace vaanarsena --create-namespace \
+  --set publicHost=mdm.example.com \
+  --set ingress.controller=traefik \
+  --set ingress.tls.secretName=vaanarsena-tls
+```
+
+The NetworkPolicy then admits only `kube-system` (where k3s runs Traefik),
+which k3s enforces out of the box. For a LAN-only lab without a public DNS
+name, a wildcard DNS service such as `mdm.<ip>.nip.io` and a certificate
+from your own CA work for the console and Linux agents (pass the CA with
+`vaanarsena-agent enroll --server-ca`); Apple and Windows devices need the
+CA installed as trusted first.
 
 ## After you install
 
@@ -131,14 +152,15 @@ state in place. Format reference:
 | `apple.enabled` / `apple.existingSecret` / `apple.topic` | `false` / `""` / `""` | APNs push certificate. |
 | `google.*` | | Service account Secret, project, Android enterprise, ChromeOS admin subject, customer ID. |
 | `ingress.enabled` | `true` | Create an Ingress for `publicHost`. |
-| `ingress.className` | `nginx` | Ingress class. |
+| `ingress.controller` | `nginx` | `nginx`, `traefik` (k3s) or `other`; selects how client certificates are requested and forwarded. |
+| `ingress.className` | controller name | Ingress class. |
 | `ingress.tls.secretName` | `<fullname>-tls` | TLS certificate Secret. |
 | `ingress.clientCertificates` | `true` | Request and forward device client certificates (ingress-nginx). |
 | `postgresql.enabled` | `true` | Bundled PostgreSQL 17. |
 | `postgresql.persistence.size` | `10Gi` | Database volume. |
 | `externalDatabase.url` / `existingSecret` | `""` | Use your own PostgreSQL 14+. |
 | `networkPolicy.enabled` | `true` | Only the ingress controller reaches the server; only the server reaches PostgreSQL. |
-| `networkPolicy.ingressNamespace` | `ingress-nginx` | Namespace of the ingress controller. |
+| `networkPolicy.ingressNamespace` | from controller | Namespace of the ingress controller: `ingress-nginx` for nginx, `kube-system` for traefik. |
 | `podDisruptionBudget.enabled` | `false` | PDB for multi-replica installs. |
 | `manifests.files` | `{}` | File name to manifest YAML; rendered into a ConfigMap and reconciled. |
 | `manifests.existingConfigMap` | `""` | Use your own ConfigMap of manifests instead. |

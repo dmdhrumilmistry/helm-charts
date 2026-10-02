@@ -51,6 +51,31 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- .Values.ca.existingSecret | default (printf "%s-ca-key" (include "vs.fullname" .)) -}}
 {{- end }}
 
+{{/* Ingress controller flavour: nginx, traefik or other. */}}
+{{- define "vs.ingressController" -}}
+{{- $c := .Values.ingress.controller | default "nginx" -}}
+{{- if not (has $c (list "nginx" "traefik" "other")) -}}
+{{- fail "ingress.controller must be nginx, traefik or other" -}}
+{{- end -}}
+{{- $c -}}
+{{- end }}
+
+{{/* Header the ingress forwards the client certificate in. */}}
+{{- define "vs.clientCertHeader" -}}
+{{- if eq (include "vs.ingressController" .) "traefik" -}}X-Forwarded-Tls-Client-Cert{{- else -}}ssl-client-cert{{- end -}}
+{{- end }}
+
+{{/* Namespace the ingress controller pods run in, for the NetworkPolicy. */}}
+{{- define "vs.ingressNamespace" -}}
+{{- if .Values.networkPolicy.ingressNamespace -}}
+{{- .Values.networkPolicy.ingressNamespace -}}
+{{- else if eq (include "vs.ingressController" .) "traefik" -}}
+kube-system
+{{- else -}}
+ingress-nginx
+{{- end -}}
+{{- end }}
+
 {{- define "vs.manifestsConfigMap" -}}
 {{- .Values.manifests.existingConfigMap | default (printf "%s-manifests" (include "vs.fullname" .)) -}}
 {{- end }}

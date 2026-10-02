@@ -4,10 +4,10 @@ description: Self-hosted VaanarSena - open source device management (MDM) for iO
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.2.0
+version: 0.3.0
 
 # Version of VaanarSena this chart deploys by default.
-appVersion: "0.2.0"
+appVersion: "0.2.1"
 
 home: https://github.com/dmdhrumilmistry/VaanarSena
 sources:
@@ -32,7 +32,7 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vaanarsena
-      image: ghcr.io/dmdhrumilmistry/vaanarsena:0.2.0
+      image: ghcr.io/dmdhrumilmistry/vaanarsena:0.2.1
     - name: postgres
       image: postgres:17-alpine
   artifacthub.io/links: |
@@ -40,6 +40,8 @@ annotations:
       url: https://github.com/dmdhrumilmistry/VaanarSena
   artifacthub.io/changes: |
     - kind: added
-      description: manifests value. Groups, policies and blueprints as YAML in Helm values, rendered to a ConfigMap and reconciled by the server (GitOps), with owner-scoped prune.
+      description: ingress.controller=traefik for k3s. Creates a TLSOption that requests client certificates and a passTLSClientCert middleware, so Windows and Linux devices can be managed behind Traefik.
     - kind: changed
-      description: Deploys VaanarSena 0.2.0 (custom payloads, static and smart groups, blueprints, declarative apply).
+      description: ingress.className and networkPolicy.ingressNamespace now default from ingress.controller.
+    - kind: changed
+      description: Deploys VaanarSena 0.2.1.
