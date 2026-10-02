@@ -4,7 +4,7 @@ description: Self-hosted VaanarSena - open source device management (MDM) for iO
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.3.0
+version: 0.3.1
 
 # Version of VaanarSena this chart deploys by default.
 appVersion: "0.2.1"
@@ -39,9 +39,5 @@ annotations:
     - name: VaanarSena source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/VaanarSena
   artifacthub.io/changes: |
-    - kind: added
-      description: ingress.controller=traefik for k3s. Creates a TLSOption that requests client certificates and a passTLSClientCert middleware, so Windows and Linux devices can be managed behind Traefik.
-    - kind: changed
-      description: ingress.className and networkPolicy.ingressNamespace now default from ingress.controller.
-    - kind: changed
-      description: Deploys VaanarSena 0.2.1.
+    - kind: fixed
+      description: Traefik ingress returned 404 for plain HTTP. Requests to http://publicHost now redirect to HTTPS (ingress.httpRedirect).

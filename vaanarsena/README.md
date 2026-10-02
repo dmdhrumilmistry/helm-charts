@@ -156,6 +156,7 @@ state in place. Format reference:
 | `ingress.className` | controller name | Ingress class. |
 | `ingress.tls.secretName` | `<fullname>-tls` | TLS certificate Secret. |
 | `ingress.clientCertificates` | `true` | Request and forward device client certificates (ingress-nginx). |
+| `ingress.httpRedirect` | `true` | Traefik: redirect plain HTTP on `publicHost` to HTTPS (otherwise `http://` gets a 404). |
 | `postgresql.enabled` | `true` | Bundled PostgreSQL 17. |
 | `postgresql.persistence.size` | `10Gi` | Database volume. |
 | `externalDatabase.url` / `existingSecret` | `""` | Use your own PostgreSQL 14+. |

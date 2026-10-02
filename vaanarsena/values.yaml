@@ -120,6 +120,9 @@ ingress:
   # to the server. Needed for Windows and Linux management behind an ingress.
   # Apple devices authenticate by request signature and do not need this.
   clientCertificates: true
+  # -- Traefik only: redirect plain HTTP on publicHost to HTTPS. ingress-nginx
+  # redirects by default when TLS is configured.
+  httpRedirect: true
 
 # Bundled PostgreSQL. Disable to use externalDatabase.
 postgresql:
