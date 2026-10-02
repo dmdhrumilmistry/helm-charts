@@ -1,0 +1,51 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "vk.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      # The server image is distroless (no shell), so probe from busybox.
+      image: busybox:1.37
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          BASE="http://{{ include "vk.fullname" . }}:{{ .Values.service.port }}"
+
+          echo "==> server is ready (API server reachable, sandbox namespace readable)"
+          wget -q -O - "$BASE/readyz" | grep -q ok && echo "    ok"
+
+          echo "==> API rejects anonymous requests"
+          code=$(wget -q -S -O /dev/null "$BASE/api/v1/sandboxes" 2>&1 | grep -o 'HTTP/1\.[01] [0-9]*' | tail -1 | cut -d" " -f2 || true)
+          [ "$code" = "401" ] && echo "    ok (HTTP 401)" || { echo "    FAILED: got HTTP $code"; exit 1; }
+
+          echo "==> console is served"
+          wget -q -O - "$BASE/" | grep -q "Vishwakarma" && echo "    ok"
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi
+{{- end }}

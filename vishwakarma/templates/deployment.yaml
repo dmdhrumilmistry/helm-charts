@@ -1,0 +1,116 @@
+{{- if not (has .Values.auth.mode (list "password" "header")) }}
+{{- fail "auth.mode must be password or header" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vk.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vk.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      labels:
+        {{- include "vk.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Restart when the policy or the credentials change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "vk.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "vk.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          image: {{ include "vk.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: VK_LISTEN
+              value: ":8080"
+            - name: VK_CONFIG
+              value: /etc/vishwakarma/config.yaml
+            - name: VK_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: VK_AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            - name: VK_SESSION_TTL
+              value: {{ .Values.auth.sessionTTL | quote }}
+            - name: VK_SECURE_COOKIES
+              value: {{ .Values.auth.secureCookies | toString | quote }}
+            {{- if eq .Values.auth.mode "header" }}
+            - name: VK_AUTH_USER_HEADER
+              value: {{ .Values.auth.userHeader | quote }}
+            - name: VK_ADMIN_USERS
+              value: {{ join "," .Values.auth.adminUsers | quote }}
+            {{- end }}
+            - name: VK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vk.secretName" . }}
+                  key: adminPassword
+            - name: VK_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vk.secretName" . }}
+                  key: apiToken
+            - name: VK_SESSION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vk.secretName" . }}
+                  key: sessionKey
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vishwakarma
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "vk.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -428,6 +428,45 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.1.0.tgz
     version: 0.1.0
+  vishwakarma:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: First release. Container sandboxes from templates or custom images, KubeVirt VMs, browser terminal and serial console, TTL expiry, per-sandbox NetworkPolicy isolation.
+      artifacthub.io/images: |
+        - name: vishwakarma
+          image: ghcr.io/dmdhrumilmistry/vishwakarma:0.1.0
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Vishwakarma source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/vishwakarma
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-02T23:24:20.556805+05:30"
+    description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
+      for testing apps and endpoint tools, with a web console, browser terminal and
+      automatic expiry.
+    digest: 472811963dd9880bbd92bb8b4069bb717ac92245f39439ee7b5a015b849e7189
+    home: https://github.com/dmdhrumilmistry/vishwakarma
+    keywords:
+    - sandbox
+    - virtual-machines
+    - kubevirt
+    - containers
+    - testing
+    - lab
+    - endpoint-security
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vishwakarma
+    sources:
+    - https://github.com/dmdhrumilmistry/vishwakarma
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vishwakarma/vishwakarma-0.1.0.tgz
+    version: 0.1.0
   wazuh:
   - annotations:
       artifacthub.io/changes: |
@@ -529,4 +568,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-02T16:49:15.5118649+05:30"
+generated: "2026-10-02T23:24:20.5562966+05:30"

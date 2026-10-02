@@ -18,6 +18,7 @@ helm search repo dmdhrumilmistry
 | [falco](falco/) | 0.1.0 | 0.45.0 | [Falco](https://falco.org) runtime security, wrapping the official Apache-2.0 chart with opinionated defaults |
 | [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
 | [vaanarsena](vaanarsena/) | 0.4.0 | 0.3.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
+| [vishwakarma](vishwakarma/) | 0.1.0 | 0.1.0 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway VMs (KubeVirt) and containers for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
 
 ### netbird
 
@@ -143,6 +144,21 @@ their credentials. See the [chart README](vaanarsena/README.md).
 > Back up the `<release>-secrets` and `<release>-ca-key` Secrets. Losing the
 > CA forces every enrolled device to re-enroll.
 
+### vishwakarma
+
+No required values:
+
+```bash
+helm install vishwakarma dmdhrumilmistry/vishwakarma   --namespace vishwakarma --create-namespace
+```
+
+Deploys the Vishwakarma server and a dedicated sandbox namespace. Users
+create containers from templates or their own images, and VMs when KubeVirt
+is installed, then work in them from a browser terminal. Each sandbox is
+isolated by a NetworkPolicy and deletes itself when its TTL runs out. The
+admin password and API token are generated on first install and preserved on
+upgrade. See the [chart README](vishwakarma/README.md).
+
 ## Repository layout
 
 ```
@@ -153,6 +169,7 @@ wazuh/                   # chart source
 falco/                   # chart source (wraps an upstream dependency)
 adguard-home/            # chart source
 vaanarsena/              # chart source
+vishwakarma/             # chart source
 */  *.tgz                # packaged releases, alongside each chart
 artifacthub-repo.yml     # Artifact Hub ownership metadata
 ```
@@ -160,7 +177,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena
+CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \

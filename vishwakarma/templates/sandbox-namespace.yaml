@@ -1,0 +1,41 @@
+{{- $ns := include "vk.sandboxNamespace" . }}
+{{- if .Values.sandboxes.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandboxes
+    {{- with .Values.sandboxes.podSecurityLevel }}
+    pod-security.kubernetes.io/enforce: {{ . }}
+    {{- end }}
+{{- end }}
+{{- if .Values.sandboxes.network.isolate }}
+---
+# Baseline for the sandbox namespace: nothing gets in unless a sandbox's own
+# NetworkPolicy (created by the server) opens its exposed ports.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vk.fullname" . }}-default-deny
+  namespace: {{ $ns }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+{{- end }}
+{{- if .Values.sandboxes.resourceQuota.enabled }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "vk.fullname" . }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- toYaml .Values.sandboxes.resourceQuota.hard | nindent 4 }}
+{{- end }}

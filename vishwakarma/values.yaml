@@ -1,0 +1,200 @@
+# Vishwakarma: throwaway VMs and containers for testing apps and endpoint tools.
+# Every value is optional; `helm install` with no values gives a working
+# console reachable with `kubectl port-forward` (see NOTES after install).
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ghcr.io
+  repository: dmdhrumilmistry/vishwakarma
+  # -- Defaults to the chart appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+
+logLevel: info
+
+auth:
+  # -- password: one built-in admin user signs in with a password.
+  # header: a trusted identity proxy (oauth2-proxy, Authelia, Pomerium...)
+  # in front of the ingress authenticates users and passes the user name in
+  # userHeader. Each user then sees only their own sandboxes. Only use header
+  # mode when the server is reachable solely through that proxy.
+  mode: password
+  # -- Generated when empty and kept across upgrades; read it back with the
+  # command in NOTES.
+  adminPassword: ""
+  # -- Bearer token for automation (acts as admin). Generated when empty.
+  apiToken: ""
+  # -- Signs session cookies. Generated when empty.
+  sessionKey: ""
+  sessionTTL: 12h
+  userHeader: X-Forwarded-User
+  # -- Users (header mode) who see and manage every sandbox.
+  adminUsers: []
+  # -- Set the Secure flag on the session cookie. Turn off only when serving
+  # the console over plain HTTP on a non-localhost address.
+  secureCookies: true
+
+# -- Use an existing Secret instead of the generated one. It must contain
+# adminPassword, apiToken and sessionKey.
+existingSecret: ""
+
+sandboxes:
+  # -- Namespace sandboxes are created in. Defaults to <fullname>-sandboxes.
+  namespace: ""
+  # -- Create the namespace with the chart. Uninstalling the chart then deletes
+  # the namespace and every sandbox in it.
+  createNamespace: true
+  # -- Pod Security Admission level to enforce on the namespace (privileged,
+  # baseline or restricted). Empty leaves the cluster default. Privileged
+  # sandboxes and KubeVirt VMs need "privileged".
+  podSecurityLevel: ""
+  # -- Address shown for NodePort endpoints: a node IP or a DNS name that
+  # resolves to your nodes.
+  publicHost: ""
+  defaultTTL: 4h
+  maxTTL: 72h
+  # -- Per user; admins are exempt. 0 for no limit.
+  maxPerUser: 5
+  # -- Let users run any image (and override its command), not only templates.
+  allowCustomImages: true
+  # -- Allow privileged containers. They can take over the node: enable only
+  # on clusters dedicated to testing, for endpoint agents that need it.
+  allowPrivileged: false
+  allowNodePort: true
+  # -- StorageClass for persistent /data volumes; empty uses the default.
+  storageClass: ""
+  # -- Used when a request does not say.
+  defaults:
+    cpu: "1"
+    memory: 1Gi
+    disk: 10Gi
+  # -- Upper bounds for any single sandbox.
+  limits:
+    cpu: "4"
+    memory: 8Gi
+    disk: 50Gi
+  network:
+    # -- One NetworkPolicy per sandbox: inbound only on exposed ports,
+    # outbound to DNS and the internet but not to blockCIDRs.
+    isolate: true
+    allowEgress: true
+    # -- Pod and service CIDRs of your cluster. The defaults are k3s's.
+    blockCIDRs:
+      - 10.42.0.0/16
+      - 10.43.0.0/16
+    # -- Also block the API server's real endpoint IPs, discovered at startup.
+    # Needed because CNIs apply egress policy after Service DNAT. On multi-node
+    # clusters add your node CIDR to blockCIDRs as well to keep sandboxes off
+    # the kubelets.
+    blockAPIServer: true
+  vm:
+    # -- auto uses KubeVirt when its API is installed; true or false force it.
+    enabled: auto
+  imagePullSecrets: []
+  nodeSelector: {}
+  tolerations: []
+  # -- Template catalogue. Empty uses the built-in one (Ubuntu, Debian, Fedora,
+  # Alpine and Kali containers; Ubuntu, Fedora, Debian and CirrOS VMs).
+  templates: []
+  #   - name: ubuntu-24.04
+  #     displayName: Ubuntu 24.04
+  #     kind: container
+  #     image: ubuntu:24.04
+  #     command: [sleep, infinity]
+  #   - name: osquery
+  #     displayName: osquery agent host
+  #     kind: container
+  #     image: ubuntu:24.04
+  #     command: [sleep, infinity]
+  #     privileged: true          # needs allowPrivileged
+  #   - name: ubuntu-24.04-vm
+  #     displayName: Ubuntu 24.04 VM
+  #     kind: vm
+  #     image: quay.io/containerdisks/ubuntu:24.04
+  #     user: ubuntu
+  #     resources: {memory: 2Gi}
+  # -- Optional ResourceQuota on the sandbox namespace, a hard ceiling for all
+  # sandboxes together.
+  resourceQuota:
+    enabled: false
+    hard:
+      limits.cpu: "16"
+      limits.memory: 32Gi
+      requests.storage: 200Gi
+      persistentvolumeclaims: "20"
+
+# -- Extra environment variables for the server container.
+extraEnv: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  # -- Fixed node port when type is NodePort.
+  nodePort: null
+  annotations: {}
+
+ingress:
+  enabled: false
+  # -- IngressClass, e.g. traefik (k3s) or nginx.
+  className: ""
+  # -- Host name of the console, e.g. sandboxes.example.com.
+  host: ""
+  annotations: {}
+  # -- TLS secret for host. With cert-manager, add its annotation above.
+  tls:
+    enabled: true
+    secretName: ""
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Restrict who can reach the server. Needs a CNI that enforces NetworkPolicy
+# (k3s does by default).
+networkPolicy:
+  enabled: true
+  # -- Namespaces allowed to reach the console besides the release namespace,
+  # typically where your ingress controller runs (kube-system for k3s Traefik).
+  allowNamespaces:
+    - kube-system
+
+tests:
+  enabled: true

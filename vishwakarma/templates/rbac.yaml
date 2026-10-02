@@ -1,0 +1,90 @@
+# The server manages sandboxes only in the sandbox namespace. It needs no
+# cluster-wide permissions: KubeVirt is detected through API discovery,
+# which every authenticated client may read.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vk.fullname" . }}
+  namespace: {{ include "vk.sandboxNamespace" . }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Websocket exec is authorized as get, SPDY exec as create.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachineinstances"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["subresources.kubevirt.io"]
+    resources: ["virtualmachineinstances/console"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "vk.fullname" . }}
+  namespace: {{ include "vk.sandboxNamespace" . }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "vk.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vk.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if and .Values.sandboxes.network.isolate .Values.sandboxes.network.blockAPIServer }}
+---
+# Read the API server endpoints so sandbox egress can exclude them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "vk.fullname" . }}-apiserver-endpoints
+  namespace: default
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    resourceNames: ["kubernetes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "vk.fullname" . }}-apiserver-endpoints
+  namespace: default
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "vk.fullname" . }}-apiserver-endpoints
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vk.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

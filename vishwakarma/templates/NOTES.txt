@@ -1,0 +1,42 @@
+Vishwakarma is starting. Sandboxes are created in namespace {{ include "vk.sandboxNamespace" . }}.
+
+1. Open the console:
+{{- if .Values.ingress.enabled }}
+
+   {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+{{- else if eq .Values.service.type "NodePort" }}
+
+   kubectl get svc -n {{ .Release.Namespace }} {{ include "vk.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}'; echo
+   Then browse to http://<node-ip>:<that port>{{ if .Values.auth.secureCookies }}
+   (over plain HTTP set auth.secureCookies=false, or browsers drop the session cookie){{ end }}
+{{- else }}
+
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "vk.fullname" . }} 8080:{{ .Values.service.port }}
+   Then browse to http://localhost:8080
+{{- end }}
+{{- if eq .Values.auth.mode "password" }}
+
+2. Sign in with the admin password:
+
+   kubectl get secret -n {{ .Release.Namespace }} {{ include "vk.secretName" . }} \
+     -o jsonpath='{.data.adminPassword}' | base64 -d; echo
+
+   Automation can use the API token as a bearer token:
+
+   kubectl get secret -n {{ .Release.Namespace }} {{ include "vk.secretName" . }} \
+     -o jsonpath='{.data.apiToken}' | base64 -d; echo
+{{- else }}
+
+2. Header mode: users are identified by the {{ .Values.auth.userHeader }} header.
+   Make sure the server is reachable ONLY through your identity proxy.
+{{- end }}
+
+Virtual machines: {{ if eq (toString .Values.sandboxes.vm.enabled) "false" }}disabled{{ else }}available once KubeVirt is installed on the cluster{{ end }}.
+Privileged containers: {{ if .Values.sandboxes.allowPrivileged }}ALLOWED - use only on a cluster dedicated to testing{{ else }}disabled{{ end }}.
+{{- if and .Values.sandboxes.allowNodePort (not .Values.sandboxes.publicHost) }}
+
+Tip: set sandboxes.publicHost to a node IP or DNS name so NodePort
+endpoints show a usable address.
+{{- end }}
+
+Docs: https://github.com/dmdhrumilmistry/vishwakarma/tree/main/docs
