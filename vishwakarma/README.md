@@ -1,8 +1,8 @@
 # vishwakarma
 
 Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma):
-throwaway VMs and containers on Kubernetes for testing apps and endpoint
-tools, with a web console, browser terminal and automatic expiry.
+throwaway containers, Android, Linux VMs and macOS for testing apps and
+endpoint tools, with a web console, browser terminal and automatic expiry.
 
 ```bash
 helm repo add dmdhrumilmistry https://dmdhrumilmistry.github.io/helm-charts
@@ -27,6 +27,37 @@ VM sandboxes need [KubeVirt](https://kubevirt.io) on the cluster; the server
 detects it and shows VM templates once it is installed. Nodes without
 `/dev/kvm` can run guests with software emulation. See
 [docs/vms.md](https://github.com/dmdhrumilmistry/vishwakarma/blob/main/docs/vms.md).
+
+## Android
+
+```yaml
+sandboxes:
+  allowPrivilegedTemplates: true
+```
+
+The Android 12 template (redroid) needs a privileged container and the
+`binder_linux` kernel module on the nodes. Connect with `adb connect
+<node>:<nodePort>` and scrcpy. See
+[docs/android.md](https://github.com/dmdhrumilmistry/vishwakarma/blob/main/docs/android.md).
+
+## macOS and the iOS Simulator
+
+macOS VMs run on Apple Silicon Macs through Tart, never in the cluster.
+Run `vishwakarma agent` on each Mac with the shared token (NOTES shows how
+to read it) and register it:
+
+```yaml
+macos:
+  agents:
+    - name: mac-mini-1
+      url: http://192.168.1.20:8484
+```
+
+For k3s inside Lima, Colima or Rancher Desktop on the same Mac, use
+`http://host.lima.internal:8484`. To try the flow on a Linux cluster without
+a Mac, set `macos.simulator.enabled=true`: an in-cluster agent simulates VMs
+(no real guest) and publishes forwarded ports as NodePorts 30500-30509. See
+[docs/macos.md](https://github.com/dmdhrumilmistry/vishwakarma/blob/main/docs/macos.md).
 
 ## k3s with Traefik
 
@@ -75,6 +106,7 @@ Traefik).
 | `sandboxes.maxPerUser` | `5` | Per-user quota (admins exempt) |
 | `sandboxes.allowCustomImages` | `true` | Any image, not only templates |
 | `sandboxes.allowPrivileged` | `false` | Privileged containers; they can take over the node |
+| `sandboxes.allowPrivilegedTemplates` | `false` | Privileged only from templates marked so (Android) |
 | `sandboxes.allowNodePort` | `true` | Expose sandbox ports on every node |
 | `sandboxes.defaults` / `limits` | `1`, `1Gi`, `10Gi` / `4`, `8Gi`, `50Gi` | CPU, memory, disk |
 | `sandboxes.network.isolate` | `true` | Per-sandbox NetworkPolicy |
@@ -83,6 +115,9 @@ Traefik).
 | `sandboxes.vm.enabled` | `auto` | Use KubeVirt when present |
 | `sandboxes.templates` | built-in | Template catalogue, see the configuration docs |
 | `sandboxes.resourceQuota.enabled` | `false` | Hard ceiling for all sandboxes together |
+| `macos.agents` | `[]` | Mac hosts running `vishwakarma agent` (`name`, `url`) |
+| `macos.token` | generated | Shared agent token (Secret key `macosToken`) |
+| `macos.simulator.enabled` | `false` | In-cluster simulated Mac for testing on Linux |
 | `ingress.enabled` | `false` | Ingress for the console (`className`, `host`, `tls`) |
 | `service.type` | `ClusterIP` | `NodePort` for a quick lab |
 | `networkPolicy.enabled` | `true` | Restrict who reaches the server |

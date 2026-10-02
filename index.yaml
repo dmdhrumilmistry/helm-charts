@@ -432,6 +432,50 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: macOS sandboxes on Mac hosts through the Tart-based agent (macos.agents), with SSH terminal, VNC and port forwarding.
+        - kind: added
+          description: In-cluster macOS agent simulator (macos.simulator.enabled) for trying the macOS flow on Linux clusters.
+        - kind: added
+          description: Android 12 template (redroid), allowed with sandboxes.allowPrivilegedTemplates.
+      artifacthub.io/images: |
+        - name: vishwakarma
+          image: ghcr.io/dmdhrumilmistry/vishwakarma:0.2.0
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Vishwakarma source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/vishwakarma
+    apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-10-03T00:32:10.7836488+05:30"
+    description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
+      for testing apps and endpoint tools, with a web console, browser terminal and
+      automatic expiry.
+    digest: 624fa7313ffe86e2c9e8a4ff48a46dd16c88246ecf471959d3f555f793b5f6b6
+    home: https://github.com/dmdhrumilmistry/vishwakarma
+    keywords:
+    - sandbox
+    - virtual-machines
+    - kubevirt
+    - containers
+    - testing
+    - lab
+    - endpoint-security
+    - macos
+    - android
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vishwakarma
+    sources:
+    - https://github.com/dmdhrumilmistry/vishwakarma
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vishwakarma/vishwakarma-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: First release. Container sandboxes from templates or custom images, KubeVirt VMs, browser terminal and serial console, TTL expiry, per-sandbox NetworkPolicy isolation.
       artifacthub.io/images: |
         - name: vishwakarma
@@ -442,7 +486,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-02T23:24:20.556805+05:30"
+    created: "2026-10-03T00:32:10.7830541+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -568,4 +612,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-02T23:24:20.5562966+05:30"
+generated: "2026-10-03T00:32:10.7778911+05:30"

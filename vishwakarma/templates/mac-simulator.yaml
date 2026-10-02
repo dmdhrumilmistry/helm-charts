@@ -1,0 +1,143 @@
+{{- if .Values.macos.simulator.enabled }}
+{{- $sim := .Values.macos.simulator }}
+{{- if gt (int (sub $sim.portMax $sim.portMin)) 49 }}
+{{- fail "macos.simulator: at most 50 forwarded ports (portMax - portMin < 50)" }}
+{{- end }}
+# A macOS host agent with the simulator backend: no real guests, for trying
+# the macOS flow on a Linux cluster. Real Macs run `vishwakarma agent` natively.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vk.simulatorName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mac-simulator
+spec:
+  replicas: 1
+  # One agent owns the forwarded host ports; never run two.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "vk.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mac-simulator
+  template:
+    metadata:
+      labels:
+        {{- include "vk.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mac-simulator
+      annotations:
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      {{- include "vk.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: agent
+          image: {{ include "vk.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - agent
+            - --backend=simulator
+            - --name=simulator
+            - --public-host={{ .Values.sandboxes.publicHost | default "127.0.0.1" }}
+            - --port-min={{ $sim.portMin }}
+            - --port-max={{ $sim.portMax }}
+            - --max-running={{ $sim.maxRunning }}
+            - --state=/var/lib/vishwakarma/agent.json
+          env:
+            - name: VK_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vk.secretName" . }}
+                  key: macosToken
+          ports:
+            - name: api
+              containerPort: 8484
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/vishwakarma
+          resources:
+            {{- toYaml $sim.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      volumes:
+        - name: state
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vk.simulatorName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mac-simulator
+spec:
+  selector:
+    {{- include "vk.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mac-simulator
+  ports:
+    - name: api
+      port: 8484
+      targetPort: api
+---
+# Forwarded VM ports, published on every node with the same numbers so the
+# addresses the agent reports (publicHost:port) work.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vk.simulatorName" . }}-ports
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mac-simulator
+spec:
+  type: NodePort
+  selector:
+    {{- include "vk.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mac-simulator
+  ports:
+    {{- range $p := untilStep (int $sim.portMin) (int (add1 $sim.portMax)) 1 }}
+    - name: p{{ $p }}
+      port: {{ $p }}
+      targetPort: {{ $p }}
+      nodePort: {{ $p }}
+    {{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vk.simulatorName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "vk.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mac-simulator
+  policyTypes: ["Ingress"]
+  ingress:
+    # The agent API: only the Vishwakarma server.
+    - ports:
+        - port: api
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "vk.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: server
+    # Forwarded VM ports: from anywhere, like a real Mac on the LAN.
+    - ports:
+        - port: {{ $sim.portMin }}
+          endPort: {{ $sim.portMax }}
+          protocol: TCP
+{{- end }}
+{{- end }}

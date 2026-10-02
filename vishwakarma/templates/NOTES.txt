@@ -31,8 +31,19 @@ Vishwakarma is starting. Sandboxes are created in namespace {{ include "vk.sandb
    Make sure the server is reachable ONLY through your identity proxy.
 {{- end }}
 
+{{- if or .Values.macos.agents .Values.macos.simulator.enabled }}
+
+macOS: {{ len .Values.macos.agents }} Mac host(s){{ if .Values.macos.simulator.enabled }} plus the in-cluster simulator (no real guests){{ end }}.
+  Start each Mac agent with the shared token:
+
+    kubectl get secret -n {{ .Release.Namespace }} {{ include "vk.secretName" . }} \
+      -o jsonpath='{.data.macosToken}' | base64 -d > vk-agent-token
+    # copy vk-agent-token to the Mac, then there:
+    vishwakarma agent --public-host <mac-ip> --token-file vk-agent-token
+{{- end }}
+
 Virtual machines: {{ if eq (toString .Values.sandboxes.vm.enabled) "false" }}disabled{{ else }}available once KubeVirt is installed on the cluster{{ end }}.
-Privileged containers: {{ if .Values.sandboxes.allowPrivileged }}ALLOWED - use only on a cluster dedicated to testing{{ else }}disabled{{ end }}.
+Privileged containers: {{ if .Values.sandboxes.allowPrivileged }}ALLOWED - use only on a cluster dedicated to testing{{ else if .Values.sandboxes.allowPrivilegedTemplates }}only from privileged templates (Android){{ else }}disabled{{ end }}.
 {{- if and .Values.sandboxes.allowNodePort (not .Values.sandboxes.publicHost) }}
 
 Tip: set sandboxes.publicHost to a node IP or DNS name so NodePort

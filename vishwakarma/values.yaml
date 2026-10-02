@@ -68,6 +68,11 @@ sandboxes:
   # -- Allow privileged containers. They can take over the node: enable only
   # on clusters dedicated to testing, for endpoint agents that need it.
   allowPrivileged: false
+  # -- Allow privileged containers only from templates marked privileged,
+  # with their own image and command. The built-in Android template needs
+  # this, plus the binder module on the nodes (see the Android docs). A
+  # privileged container can still take over its node.
+  allowPrivilegedTemplates: false
   allowNodePort: true
   # -- StorageClass for persistent /data volumes; empty uses the default.
   storageClass: ""
@@ -102,7 +107,8 @@ sandboxes:
   nodeSelector: {}
   tolerations: []
   # -- Template catalogue. Empty uses the built-in one (Ubuntu, Debian, Fedora,
-  # Alpine and Kali containers; Ubuntu, Fedora, Debian and CirrOS VMs).
+  # Alpine, Kali and Android containers; Ubuntu, Fedora, Debian and CirrOS VMs;
+  # macOS Sequoia, Tahoe and Xcode on Mac hosts).
   templates: []
   #   - name: ubuntu-24.04
   #     displayName: Ubuntu 24.04
@@ -130,6 +136,36 @@ sandboxes:
       limits.memory: 32Gi
       requests.storage: 200Gi
       persistentvolumeclaims: "20"
+
+# macOS sandboxes run on Mac hosts: each Mac runs `vishwakarma agent`
+# (Tart underneath) and the server calls it. See docs/macos.md.
+macos:
+  # -- Mac host agents, e.g.
+  #   - name: mac-mini-1
+  #     url: http://192.168.1.20:8484
+  #   - name: k3s-on-this-mac       # k3s in Lima/Colima/Rancher Desktop
+  #     url: http://host.lima.internal:8484
+  agents: []
+  # -- Give every macOS VM a VNC endpoint for its screen.
+  vnc: true
+  # -- Shared agent token. Generated when empty; start each agent with it
+  # (see NOTES). Stored in the chart Secret under macosToken.
+  token: ""
+  # An in-cluster agent with the simulator backend: macOS sandboxes go
+  # through the whole lifecycle, port forwarding and terminal, but with no
+  # real guest. For trying the macOS flow on a Linux cluster.
+  simulator:
+    enabled: false
+    # -- Forwarded ports, published as NodePorts with the same numbers.
+    portMin: 30500
+    portMax: 30509
+    maxRunning: 4
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        memory: 64Mi
 
 # -- Extra environment variables for the server container.
 extraEnv: []

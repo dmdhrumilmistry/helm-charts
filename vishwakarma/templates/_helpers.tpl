@@ -83,7 +83,7 @@ live Secret on every upgrade so the admin password and API token stay put.
   {{- $old := dict -}}
   {{- $live := (lookup "v1" "Secret" .Release.Namespace (include "vk.secretName" .)) -}}
   {{- if $live -}}{{- $old = $live.data | default dict -}}{{- end -}}
-  {{- range $key, $spec := dict "adminPassword" (list $.Values.auth.adminPassword 24) "apiToken" (list $.Values.auth.apiToken 40) "sessionKey" (list $.Values.auth.sessionKey 64) -}}
+  {{- range $key, $spec := dict "adminPassword" (list $.Values.auth.adminPassword 24) "apiToken" (list $.Values.auth.apiToken 40) "sessionKey" (list $.Values.auth.sessionKey 64) "macosToken" (list $.Values.macos.token 40) -}}
     {{- $explicit := index $spec 0 -}}
     {{- if $explicit -}}
       {{- $_ := set $gen $key $explicit -}}
@@ -102,6 +102,22 @@ live Secret on every upgrade so the admin password and API token stay put.
 {{- index .root.Values._vkGenerated .key -}}
 {{- end }}
 
+{{- define "vk.simulatorName" -}}
+{{- printf "%s-mac-simulator" (include "vk.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/* Configured Mac agents plus the in-cluster simulator, as a YAML list. */}}
+{{- define "vk.macAgents" -}}
+{{- $agents := list -}}
+{{- range .Values.macos.agents -}}
+{{- $agents = append $agents (dict "name" .name "url" .url "insecureSkipVerify" (default false .insecureSkipVerify)) -}}
+{{- end -}}
+{{- if .Values.macos.simulator.enabled -}}
+{{- $agents = append $agents (dict "name" "simulator" "url" (printf "http://%s.%s.svc:8484" (include "vk.simulatorName" .) .Release.Namespace) "insecureSkipVerify" false) -}}
+{{- end -}}
+{{- toYaml $agents -}}
+{{- end }}
+
 {{/* The policy file the server reads, rendered from .Values.sandboxes. */}}
 {{- define "vk.policy" -}}
 {{- $s := .Values.sandboxes -}}
@@ -113,12 +129,14 @@ live Secret on every upgrade so the admin password and API token stay put.
   "maxSandboxesPerUser" (int $s.maxPerUser)
   "allowCustomImages" $s.allowCustomImages
   "allowPrivileged" $s.allowPrivileged
+  "allowPrivilegedTemplates" $s.allowPrivilegedTemplates
   "allowNodePort" $s.allowNodePort
   "storageClass" $s.storageClass
   "defaults" $s.defaults
   "limits" $s.limits
   "network" $s.network
   "vm" (dict "enabled" (toString $s.vm.enabled))
+  "macos" (dict "agents" (include "vk.macAgents" . | fromYamlArray) "vnc" .Values.macos.vnc)
   "imagePullSecrets" ($s.imagePullSecrets | default list)
   "nodeSelector" ($s.nodeSelector | default dict)
   "tolerations" ($s.tolerations | default list)
