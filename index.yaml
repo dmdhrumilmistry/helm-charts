@@ -227,6 +227,45 @@ entries:
   vaanarsena:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: Deploys VaanarSena 0.3.0, with the redesigned console and Settings > Platforms for connecting Apple, Google, Android Enterprise and ChromeOS without restarting.
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: ghcr.io/dmdhrumilmistry/vaanarsena:0.3.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.3.0
+    created: "2026-10-02T16:49:15.535912+05:30"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: e2ec69ff64ed030c8c9484f205e08a23ea2e8167fed9a206e74a62293ea54a06
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.4.0.tgz
+    version: 0.4.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: Traefik ingress returned 404 for plain HTTP. Requests to http://publicHost now redirect to HTTPS (ingress.httpRedirect).
       artifacthub.io/images: |
@@ -240,7 +279,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.1
-    created: "2026-10-02T12:05:54.6466546+05:30"
+    created: "2026-10-02T16:49:15.5353998+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: 0dd8b0eb12efb0231a2c7275c61b199703b7ed11bff5bb71215974e9af12d2ab
@@ -283,7 +322,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.1
-    created: "2026-10-02T12:05:54.6461504+05:30"
+    created: "2026-10-02T16:49:15.5285159+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: f1ad7f7696dca8f4b239ab8eb47fb63a0c6e3392630ffa9c16025ad13c7228cf
@@ -324,7 +363,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-02T12:05:54.6456438+05:30"
+    created: "2026-10-02T16:49:15.5244043+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: f76220f1e03c134e929fd46d58336954251e00e92aaaf9becded171e93ce3b67
@@ -365,7 +404,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-02T12:05:54.6451353+05:30"
+    created: "2026-10-02T16:49:15.5183898+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: be447d98113eb970b6082cfd2d1b37beb413d9023b874fd814d41e93ac05313c
@@ -490,4 +529,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-02T12:05:54.6441167+05:30"
+generated: "2026-10-02T16:49:15.5118649+05:30"

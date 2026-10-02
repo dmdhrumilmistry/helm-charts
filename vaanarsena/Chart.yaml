@@ -4,10 +4,10 @@ description: Self-hosted VaanarSena - open source device management (MDM) for iO
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.3.1
+version: 0.4.0
 
 # Version of VaanarSena this chart deploys by default.
-appVersion: "0.2.1"
+appVersion: "0.3.0"
 
 home: https://github.com/dmdhrumilmistry/VaanarSena
 sources:
@@ -32,12 +32,12 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vaanarsena
-      image: ghcr.io/dmdhrumilmistry/vaanarsena:0.2.1
+      image: ghcr.io/dmdhrumilmistry/vaanarsena:0.3.0
     - name: postgres
       image: postgres:17-alpine
   artifacthub.io/links: |
     - name: VaanarSena source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/VaanarSena
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Traefik ingress returned 404 for plain HTTP. Requests to http://publicHost now redirect to HTTPS (ingress.httpRedirect).
+    - kind: changed
+      description: Deploys VaanarSena 0.3.0, with the redesigned console and Settings > Platforms for connecting Apple, Google, Android Enterprise and ChromeOS without restarting.
