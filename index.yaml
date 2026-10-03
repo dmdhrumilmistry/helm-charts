@@ -431,6 +431,76 @@ entries:
   vishwakarma:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: sandboxes.macosLinuxBaseImages maps macOS flavors (ventura, tahoe...) to installed-disk images, one template each.
+        - kind: added
+          description: Optional registry pull secret for sandbox images (sandboxes.registryCredentials), added to the sandbox pull secrets automatically.
+        - kind: added
+          description: "macOS on Linux (installed)" template that boots a snapshot of an installed macOS (sandboxes.macosLinuxBaseImage) instead of reinstalling.
+        - kind: fixed
+          description: macOS on Linux uses a 3 GB guest so it fits its 4.5 GiB memory limit under software emulation (it was OOM-killed).
+        - kind: changed
+          description: macOS on Linux keeps the installed system on a persistent 50 GiB volume, so it survives stop, start and restarts.
+        - kind: fixed
+          description: macOS on Linux boots under software emulation (no AVX/AES-NI offered to the guest, which made corecrypto panic).
+        - kind: added
+          description: Google Play images published and enabled by default, plus an unrooted variant (no su, production build).
+        - kind: fixed
+          description: macOS on Linux no longer waits forever for /dev/kvm (software emulation fallback), uses the current Docker-OSX image, and reserves its memory in full.
+        - kind: added
+          description: Screen tab in the console (noVNC) for Android, KubeVirt VMs and macOS VMs.
+        - kind: added
+          description: Android sandboxes stream their screen to the browser by default through a scrcpy sidecar.
+        - kind: added
+          description: Opt-in macOS on Linux template (Docker-OSX, needs /dev/kvm), sandboxes.macosOnLinux.
+        - kind: added
+          description: Android 12 with Play Store template for a self-built image, sandboxes.androidPlayStoreImage.
+        - kind: fixed
+          description: Copy and paste in the console over plain HTTP (copy buttons, terminal, Android screen).
+      artifacthub.io/images: |
+        - name: vishwakarma
+          image: docker.io/dmdhrumilmistry/vishwakarma:0.4.5
+        - name: android-screen
+          image: docker.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.5
+        - name: redroid-playstore
+          image: docker.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
+        - name: redroid-playstore-unrooted
+          image: docker.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12-unrooted
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Vishwakarma source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/vishwakarma
+    apiVersion: v2
+    appVersion: 0.4.5
+    created: "2026-10-03T15:35:36.3073634+05:30"
+    description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
+      for testing apps and endpoint tools, with a web console, browser terminal and
+      automatic expiry.
+    digest: cdb8b281fde18010ea5988f00dd727308309eb92b9219c2f3573c858fc79fb7d
+    home: https://github.com/dmdhrumilmistry/vishwakarma
+    keywords:
+    - sandbox
+    - virtual-machines
+    - kubevirt
+    - containers
+    - testing
+    - lab
+    - endpoint-security
+    - macos
+    - android
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vishwakarma
+    sources:
+    - https://github.com/dmdhrumilmistry/vishwakarma
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vishwakarma/vishwakarma-0.4.6.tgz
+    version: 0.4.6
+  - annotations:
+      artifacthub.io/changes: |
         - kind: added
           description: Optional registry pull secret for sandbox images (sandboxes.registryCredentials), added to the sandbox pull secrets automatically.
         - kind: added
@@ -470,7 +540,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.4
-    created: "2026-10-03T15:04:40.4902709+05:30"
+    created: "2026-10-03T15:35:36.3063635+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -536,7 +606,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.4
-    created: "2026-10-03T15:04:40.4902709+05:30"
+    created: "2026-10-03T15:35:36.3053635+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -600,7 +670,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.3
-    created: "2026-10-03T15:04:40.4892712+05:30"
+    created: "2026-10-03T15:35:36.3043634+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -662,7 +732,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.2
-    created: "2026-10-03T15:04:40.4892712+05:30"
+    created: "2026-10-03T15:35:36.3033614+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -722,7 +792,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.1
-    created: "2026-10-03T15:04:40.4882685+05:30"
+    created: "2026-10-03T15:35:36.3033614+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -780,7 +850,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.0
-    created: "2026-10-03T15:04:40.4868756+05:30"
+    created: "2026-10-03T15:35:36.302349+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -830,7 +900,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-10-03T15:04:40.4868756+05:30"
+    created: "2026-10-03T15:35:36.3017968+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -874,7 +944,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-03T15:04:40.484876+05:30"
+    created: "2026-10-03T15:35:36.3002947+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -914,7 +984,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-03T15:04:40.484876+05:30"
+    created: "2026-10-03T15:35:36.3002947+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -1040,4 +1110,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-03T15:04:40.4828724+05:30"
+generated: "2026-10-03T15:35:36.297789+05:30"

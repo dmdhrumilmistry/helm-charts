@@ -78,11 +78,14 @@ sandboxes:
   # hands it out) and is NOT licensed by Apple: the macOS license only
   # permits macOS on Apple hardware. Turning this on is your decision.
   macosOnLinux: false
-  # -- An installed macOS disk made with images/macos-base/snapshot.sh. Adds
-  # "macOS on Linux (installed)", which boots that system directly instead
-  # of the installer. Keep the repository private (it holds Apple's OS) and
-  # list its pull secret in imagePullSecrets below.
-  macosLinuxBaseImage: ""
+  # -- Installed macOS disks made with images/macos-base/snapshot.sh, by
+  # flavor. Each adds "macOS <Flavor> on Linux (installed)", which boots
+  # that system directly instead of the installer. Keep the repository
+  # private (it holds Apple's OS) and list its pull secret in
+  # imagePullSecrets below, e.g.
+  #   ventura: docker.io/you/vishwakarma-macos:ventura
+  #   tahoe: docker.io/you/vishwakarma-macos:tahoe
+  macosLinuxBaseImages: {}
   # -- Android screen sidecar image; defaults to <image.repository>-android-screen:<tag>.
   androidScreenImage: ""
   # -- redroid with Google Play (built from MindTheGapps by the Vishwakarma

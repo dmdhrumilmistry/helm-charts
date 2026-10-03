@@ -153,7 +153,7 @@ live Secret on every upgrade so the admin password and API token stay put.
   "allowPrivileged" $s.allowPrivileged
   "allowPrivilegedTemplates" $s.allowPrivilegedTemplates
   "macosOnLinux" $s.macosOnLinux
-  "macosLinuxBaseImage" $s.macosLinuxBaseImage
+  "macosLinuxBaseImages" ($s.macosLinuxBaseImages | default dict)
   "androidScreenImage" (include "vk.androidScreenImage" .)
   "androidPlayStoreImage" $s.androidPlayStoreImage
   "androidPlayStoreUnrootedImage" $s.androidPlayStoreUnrootedImage
