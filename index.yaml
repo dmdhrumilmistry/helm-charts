@@ -16,7 +16,7 @@ entries:
           url: https://github.com/AdguardTeam/AdGuardHome
     apiVersion: v2
     appVersion: 0.107.79
-    created: "2026-09-22T14:57:51.7461171+05:30"
+    created: "2026-10-03T18:31:47.0681879+05:30"
     description: Self-hosted AdGuard Home — network-wide DNS with ad blocking and
       local DNS rewrites, configured declaratively.
     digest: 54cbad745ff259444c7575d2e0192042c9ead5492be4706ca511746769cb1be8
@@ -56,7 +56,7 @@ entries:
           url: https://github.com/falcosecurity/charts/tree/master/charts/falco
     apiVersion: v2
     appVersion: 0.45.0
-    created: "2026-09-21T21:31:31.5097533+05:30"
+    created: "2026-10-03T18:31:47.0812101+05:30"
     dependencies:
     - name: falco
       repository: https://falcosecurity.github.io/charts
@@ -103,7 +103,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 0.79.0
-    created: "2026-09-20T20:04:33.7763116+05:30"
+    created: "2026-10-03T18:31:47.1016717+05:30"
     description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
       local user management, PostgreSQL and zero external IdP required.
     digest: 156dec47c97916401be00a97d0255eccbd53be590668e5dd23518ee4406d3ccd
@@ -142,7 +142,7 @@ entries:
       artifacthub.io/license: MIT
     apiVersion: v2
     appVersion: 0.79.0
-    created: "2026-09-20T20:04:33.7752888+05:30"
+    created: "2026-10-03T18:31:47.0954143+05:30"
     description: Self-hosted NetBird (WireGuard-based overlay network) with built-in
       local user management, PostgreSQL and zero external IdP required.
     digest: b5bfdd9ad84bb4c2de2319ba441eb7853932c2ce74e85306f82d8ea4c03c3feb
@@ -168,7 +168,7 @@ entries:
     version: 1.0.0
   - apiVersion: v2
     appVersion: v0.0.1-beta
-    created: "2026-09-20T20:04:33.774264+05:30"
+    created: "2026-10-03T18:31:47.0884862+05:30"
     description: A Helm chart for deploying a self-hosted Netbird stack.
     digest: 43ef42b764675dd0ef79fa995bc26571d86162c0022a2b715661622ee3b1c72f
     icon: https://avatars.githubusercontent.com/u/100464677
@@ -200,8 +200,8 @@ entries:
           url: https://goteleport.com/docs/
     apiVersion: v2
     appVersion: 18.10.0
-    created: "2026-09-21T00:05:55.145881+05:30"
-    description: Self-hosted Teleport Community Edition â€” SSH, Kubernetes, application
+    created: "2026-10-03T18:31:47.1088691+05:30"
+    description: Self-hosted Teleport Community Edition — SSH, Kubernetes, application
       and database access with short-lived certificates. Single-node or HA on PostgreSQL.
     digest: d9b7191186fa208c76c3f0dacde5c76e047353446f366db125435ede5abd2c23
     home: https://goteleport.com
@@ -228,6 +228,47 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: Deploys VaanarSena 0.4.0, with a redesigned console (light, dark and system themes) and the new emblem.
+        - kind: added
+          description: Software inventory from VaanarSena 0.4.0 (installed apps, services and profiles per device and across the fleet); the database migration runs on start.
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: ghcr.io/dmdhrumilmistry/vaanarsena:0.4.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.4.0
+    created: "2026-10-03T18:31:47.1129734+05:30"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: 68447a755067cda61082565b85fb69df9a15c01a458d928484f79a71bf5382f5
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.5.0.tgz
+    version: 0.5.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: Deploys VaanarSena 0.3.0, with the redesigned console and Settings > Platforms for connecting Apple, Google, Android Enterprise and ChromeOS without restarting.
       artifacthub.io/images: |
         - name: vaanarsena
@@ -240,7 +281,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-10-02T16:49:15.535912+05:30"
+    created: "2026-10-03T18:31:47.1124585+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: e2ec69ff64ed030c8c9484f205e08a23ea2e8167fed9a206e74a62293ea54a06
@@ -279,7 +320,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.1
-    created: "2026-10-02T16:49:15.5353998+05:30"
+    created: "2026-10-03T18:31:47.111946+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: 0dd8b0eb12efb0231a2c7275c61b199703b7ed11bff5bb71215974e9af12d2ab
@@ -322,7 +363,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.1
-    created: "2026-10-02T16:49:15.5285159+05:30"
+    created: "2026-10-03T18:31:47.1109223+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: f1ad7f7696dca8f4b239ab8eb47fb63a0c6e3392630ffa9c16025ad13c7228cf
@@ -363,7 +404,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-02T16:49:15.5244043+05:30"
+    created: "2026-10-03T18:31:47.1104098+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: f76220f1e03c134e929fd46d58336954251e00e92aaaf9becded171e93ce3b67
@@ -404,7 +445,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/VaanarSena
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-02T16:49:15.5183898+05:30"
+    created: "2026-10-03T18:31:47.1098976+05:30"
     description: Self-hosted VaanarSena - open source device management (MDM) for
       iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
     digest: be447d98113eb970b6082cfd2d1b37beb413d9023b874fd814d41e93ac05313c
@@ -474,7 +515,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.6
-    created: "2026-10-03T17:25:34.1963945+05:30"
+    created: "2026-10-03T18:31:47.1258283+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -544,7 +585,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.5
-    created: "2026-10-03T17:25:34.1953721+05:30"
+    created: "2026-10-03T18:31:47.124308+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -612,7 +653,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.4
-    created: "2026-10-03T17:25:34.1874393+05:30"
+    created: "2026-10-03T18:31:47.1237977+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -678,7 +719,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.4
-    created: "2026-10-03T17:25:34.1818615+05:30"
+    created: "2026-10-03T18:31:47.1232797+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -742,7 +783,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.3
-    created: "2026-10-03T17:25:34.1777098+05:30"
+    created: "2026-10-03T18:31:47.1212142+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -804,7 +845,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.2
-    created: "2026-10-03T17:25:34.1713053+05:30"
+    created: "2026-10-03T18:31:47.1201806+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -864,7 +905,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.1
-    created: "2026-10-03T17:25:34.1654076+05:30"
+    created: "2026-10-03T18:31:47.1196775+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -922,7 +963,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.4.0
-    created: "2026-10-03T17:25:34.1592527+05:30"
+    created: "2026-10-03T18:31:47.1186733+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -972,7 +1013,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-10-03T17:25:34.1527235+05:30"
+    created: "2026-10-03T18:31:47.118157+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -1016,7 +1057,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-03T17:25:34.1464787+05:30"
+    created: "2026-10-03T18:31:47.1160552+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -1056,7 +1097,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-03T17:25:34.1400164+05:30"
+    created: "2026-10-03T18:31:47.1139957+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -1109,7 +1150,7 @@ entries:
           url: https://documentation.wazuh.com/
     apiVersion: v2
     appVersion: 4.14.7
-    created: "2026-09-22T14:58:14.5855047+05:30"
+    created: "2026-10-03T18:31:47.1386201+05:30"
     description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager and
       dashboard, with the internal PKI generated for you.
     digest: d9f714588052e0e71ee095be325db35494597ffe04333bbcc90d4abe841f745c
@@ -1157,7 +1198,7 @@ entries:
           url: https://documentation.wazuh.com/
     apiVersion: v2
     appVersion: 4.14.7
-    created: "2026-09-22T14:58:14.5845026+05:30"
+    created: "2026-10-03T18:31:47.1328523+05:30"
     description: Self-hosted Wazuh — open source XDR and SIEM. Indexer, manager and
       dashboard, with the internal PKI generated for you.
     digest: dc144c263b6abb50506fb5deb74aa1416bf66121af3b655403da1503f0c8f26b
@@ -1182,4 +1223,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-03T17:25:34.1336182+05:30"
+generated: "2026-10-03T18:31:47.0599453+05:30"
