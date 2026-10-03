@@ -4,10 +4,10 @@ description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernete
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.3.0
+version: 0.4.0
 
 # Version of Vishwakarma this chart deploys by default.
-appVersion: "0.3.0"
+appVersion: "0.4.0"
 
 home: https://github.com/dmdhrumilmistry/vishwakarma
 sources:
@@ -34,13 +34,21 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vishwakarma
-      image: ghcr.io/dmdhrumilmistry/vishwakarma:0.3.0
+      image: ghcr.io/dmdhrumilmistry/vishwakarma:0.4.0
     - name: android-screen
-      image: ghcr.io/dmdhrumilmistry/vishwakarma-android-screen:0.3.0
+      image: ghcr.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.0
+    - name: redroid-playstore
+      image: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
+    - name: redroid-playstore-unrooted
+      image: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12-unrooted
   artifacthub.io/links: |
     - name: Vishwakarma source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/vishwakarma
   artifacthub.io/changes: |
+    - kind: added
+      description: Google Play images published and enabled by default, plus an unrooted variant (no su, production build).
+    - kind: fixed
+      description: macOS on Linux no longer waits forever for /dev/kvm (software emulation fallback), uses the current Docker-OSX image, and reserves its memory in full.
     - kind: added
       description: Screen tab in the console (noVNC) for Android, KubeVirt VMs and macOS VMs.
     - kind: added

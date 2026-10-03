@@ -1,6 +1,6 @@
-# The server manages sandboxes only in the sandbox namespace. It needs no
-# cluster-wide permissions: KubeVirt is detected through API discovery,
-# which every authenticated client may read.
+# The server manages sandboxes only in the sandbox namespace. Its only
+# cluster-wide permission is reading nodes (below); KubeVirt is detected
+# through API discovery, which every authenticated client may read.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -88,3 +88,32 @@ subjects:
     name: {{ include "vk.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
+---
+# Read nodes to find /dev/kvm (KubeVirt's devices.kubevirt.io/kvm), so
+# templates that prefer KVM use it when present and run under emulation
+# otherwise instead of waiting forever. Read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ printf "%s-%s-nodes" .Release.Namespace (include "vk.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ printf "%s-%s-nodes" .Release.Namespace (include "vk.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "vk.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ printf "%s-%s-nodes" .Release.Namespace (include "vk.fullname" .) | trunc 63 | trimSuffix "-" }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vk.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

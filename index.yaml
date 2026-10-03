@@ -432,6 +432,64 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: Google Play images published and enabled by default, plus an unrooted variant (no su, production build).
+        - kind: fixed
+          description: macOS on Linux no longer waits forever for /dev/kvm (software emulation fallback), uses the current Docker-OSX image, and reserves its memory in full.
+        - kind: added
+          description: Screen tab in the console (noVNC) for Android, KubeVirt VMs and macOS VMs.
+        - kind: added
+          description: Android sandboxes stream their screen to the browser by default through a scrcpy sidecar.
+        - kind: added
+          description: Opt-in macOS on Linux template (Docker-OSX, needs /dev/kvm), sandboxes.macosOnLinux.
+        - kind: added
+          description: Android 12 with Play Store template for a self-built image, sandboxes.androidPlayStoreImage.
+        - kind: fixed
+          description: Copy and paste in the console over plain HTTP (copy buttons, terminal, Android screen).
+      artifacthub.io/images: |
+        - name: vishwakarma
+          image: ghcr.io/dmdhrumilmistry/vishwakarma:0.4.0
+        - name: android-screen
+          image: ghcr.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.0
+        - name: redroid-playstore
+          image: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
+        - name: redroid-playstore-unrooted
+          image: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12-unrooted
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Vishwakarma source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/vishwakarma
+    apiVersion: v2
+    appVersion: 0.4.0
+    created: "2026-10-03T13:22:15.1039802+05:30"
+    description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
+      for testing apps and endpoint tools, with a web console, browser terminal and
+      automatic expiry.
+    digest: 6e4ad1478b247eaba523edb03de09867947956f3a56c21fbfd3303c82dc2d41f
+    home: https://github.com/dmdhrumilmistry/vishwakarma
+    keywords:
+    - sandbox
+    - virtual-machines
+    - kubevirt
+    - containers
+    - testing
+    - lab
+    - endpoint-security
+    - macos
+    - android
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vishwakarma
+    sources:
+    - https://github.com/dmdhrumilmistry/vishwakarma
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vishwakarma/vishwakarma-0.4.0.tgz
+    version: 0.4.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: Screen tab in the console (noVNC) for Android, KubeVirt VMs and macOS VMs.
         - kind: added
           description: Android sandboxes stream their screen to the browser by default through a scrcpy sidecar.
@@ -452,7 +510,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.3.0
-    created: "2026-10-03T01:46:57.2226918+05:30"
+    created: "2026-10-03T13:22:15.1034683+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -496,7 +554,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-10-03T01:46:57.2219043+05:30"
+    created: "2026-10-03T13:22:15.1001928+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -536,7 +594,7 @@ entries:
           url: https://github.com/dmdhrumilmistry/vishwakarma
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-10-03T01:46:57.2206948+05:30"
+    created: "2026-10-03T13:22:15.0955836+05:30"
     description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernetes
       for testing apps and endpoint tools, with a web console, browser terminal and
       automatic expiry.
@@ -662,4 +720,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-03T01:46:57.2196563+05:30"
+generated: "2026-10-03T13:22:15.0906569+05:30"

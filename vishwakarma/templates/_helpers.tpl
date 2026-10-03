@@ -145,6 +145,7 @@ live Secret on every upgrade so the admin password and API token stay put.
   "macosOnLinux" $s.macosOnLinux
   "androidScreenImage" (include "vk.androidScreenImage" .)
   "androidPlayStoreImage" $s.androidPlayStoreImage
+  "androidPlayStoreUnrootedImage" $s.androidPlayStoreUnrootedImage
   "allowNodePort" $s.allowNodePort
   "storageClass" $s.storageClass
   "defaults" $s.defaults

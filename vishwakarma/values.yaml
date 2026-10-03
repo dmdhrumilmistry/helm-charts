@@ -80,11 +80,13 @@ sandboxes:
   macosOnLinux: false
   # -- Android screen sidecar image; defaults to <image.repository>-android-screen:<tag>.
   androidScreenImage: ""
-  # -- A redroid image with Google Play that you built with
-  # images/android-playstore/build.sh (Google's apps cannot be redistributed,
-  # so there is no public image). Setting it adds the "Android 12 with Play
-  # Store" template. Nodes must be able to pull it.
-  androidPlayStoreImage: ""
+  # -- redroid with Google Play (built from MindTheGapps by the Vishwakarma
+  # release workflow, or by you with images/android-playstore/build.sh).
+  # Adds "Android 12 with Play Store". Empty removes the template.
+  androidPlayStoreImage: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
+  # -- The same without root (no su, a "user" release-keys build), for apps
+  # that refuse rooted devices. Adds "Android 12 with Play Store (unrooted)".
+  androidPlayStoreUnrootedImage: ghcr.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12-unrooted
   allowNodePort: true
   # -- StorageClass for persistent /data volumes; empty uses the default.
   storageClass: ""
