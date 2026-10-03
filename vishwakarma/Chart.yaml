@@ -4,10 +4,10 @@ description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernete
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.4.6
+version: 0.4.7
 
 # Version of Vishwakarma this chart deploys by default.
-appVersion: "0.4.5"
+appVersion: "0.4.6"
 
 home: https://github.com/dmdhrumilmistry/vishwakarma
 sources:
@@ -34,9 +34,9 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vishwakarma
-      image: docker.io/dmdhrumilmistry/vishwakarma:0.4.5
+      image: docker.io/dmdhrumilmistry/vishwakarma:0.4.6
     - name: android-screen
-      image: docker.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.5
+      image: docker.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.6
     - name: redroid-playstore
       image: docker.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
     - name: redroid-playstore-unrooted
@@ -45,6 +45,8 @@ annotations:
     - name: Vishwakarma source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/vishwakarma
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Emulated macOS uses a Haswell CPU model without AES-NI/PCLMULQDQ, so Ventura finishes its first boot.
     - kind: changed
       description: sandboxes.macosLinuxBaseImages maps macOS flavors (ventura, tahoe...) to installed-disk images, one template each.
     - kind: added
