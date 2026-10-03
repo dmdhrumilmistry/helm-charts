@@ -63,8 +63,9 @@ macos:
 For k3s inside Lima, Colima or Rancher Desktop on the same Mac, use
 `http://host.lima.internal:8484`.
 
-`sandboxes.macosOnLinux=true` adds a Docker-OSX template (macOS installer
-under QEMU). It uses `/dev/kvm` when a node has it and software emulation
+`sandboxes.macosOnLinux=true` adds a Docker-OSX template (macOS under
+QEMU): install macOS once from the Screen tab and it stays on the sandbox's
+50 GiB volume. It uses `/dev/kvm` when a node has it and software emulation
 (very slow) otherwise, and reserves 4.5 GiB of memory. Apple's license only
 permits macOS on Apple hardware, so this is off by default. To try the flow on a Linux cluster without
 a Mac, set `macos.simulator.enabled=true`: an in-cluster agent simulates VMs
