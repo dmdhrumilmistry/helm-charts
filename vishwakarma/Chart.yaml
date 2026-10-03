@@ -4,7 +4,7 @@ description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernete
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.4.4
+version: 0.4.5
 
 # Version of Vishwakarma this chart deploys by default.
 appVersion: "0.4.4"
@@ -45,6 +45,8 @@ annotations:
     - name: Vishwakarma source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/vishwakarma
   artifacthub.io/changes: |
+    - kind: added
+      description: Optional registry pull secret for sandbox images (sandboxes.registryCredentials), added to the sandbox pull secrets automatically.
     - kind: added
       description: "macOS on Linux (installed)" template that boots a snapshot of an installed macOS (sandboxes.macosLinuxBaseImage) instead of reinstalling.
     - kind: fixed

@@ -122,7 +122,21 @@ sandboxes:
   vm:
     # -- auto uses KubeVirt when its API is installed; true or false force it.
     enabled: auto
+  # -- Secrets (in the sandbox namespace) attached to every sandbox pod for
+  # pulling private images.
   imagePullSecrets: []
+  # Optionally create the registry Secret with the chart; it is added to
+  # imagePullSecrets automatically. Alternatively create it yourself:
+  #   kubectl -n <sandbox namespace> create secret docker-registry dockerhub   #     --docker-server=https://index.docker.io/v1/ --docker-username=<user> --docker-password=<token>
+  # and list its name in imagePullSecrets.
+  registryCredentials:
+    create: false
+    name: registry-credentials
+    server: https://index.docker.io/v1/
+    username: ""
+    # -- An access token rather than an account password. Pass it with --set
+    # or a values file you keep out of git.
+    password: ""
   nodeSelector: {}
   tolerations: []
   # -- Template catalogue. Empty uses the built-in one (Ubuntu, Debian, Fedora,

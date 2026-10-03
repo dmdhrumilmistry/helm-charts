@@ -114,6 +114,16 @@ live Secret on every upgrade so the admin password and API token stay put.
 {{- end -}}
 {{- end }}
 
+{{/* Sandbox pull secrets: the configured ones plus the chart-created one. */}}
+{{- define "vk.sandboxPullSecrets" -}}
+{{- $list := .Values.sandboxes.imagePullSecrets | default list -}}
+{{- $r := .Values.sandboxes.registryCredentials -}}
+{{- if and $r.create (not (has $r.name $list)) -}}
+{{- $list = append $list $r.name -}}
+{{- end -}}
+{{- $list | toJson -}}
+{{- end }}
+
 {{- define "vk.simulatorName" -}}
 {{- printf "%s-mac-simulator" (include "vk.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
@@ -154,7 +164,7 @@ live Secret on every upgrade so the admin password and API token stay put.
   "network" $s.network
   "vm" (dict "enabled" (toString $s.vm.enabled))
   "macos" (dict "agents" (include "vk.macAgents" . | fromYamlArray) "vnc" .Values.macos.vnc)
-  "imagePullSecrets" ($s.imagePullSecrets | default list)
+  "imagePullSecrets" (include "vk.sandboxPullSecrets" . | fromJsonArray)
   "nodeSelector" ($s.nodeSelector | default dict)
   "tolerations" ($s.tolerations | default list)
 -}}

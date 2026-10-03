@@ -122,6 +122,8 @@ Traefik).
 | `sandboxes.allowPrivilegedTemplates` | `false` | Privileged only from templates marked so (Android) |
 | `sandboxes.macosOnLinux` | `false` | Docker-OSX template; needs `/dev/kvm`, not licensed by Apple |
 | `sandboxes.androidScreenImage` | release image | Android screen sidecar |
+| `sandboxes.imagePullSecrets` | `[]` | Pull secrets (in the sandbox namespace) for private sandbox images |
+| `sandboxes.registryCredentials.create` | `false` | Create a docker-registry Secret from `username`/`password` (a token) and use it for pulls |
 | `sandboxes.androidPlayStoreImage` | published image | Google Play redroid; empty removes the template |
 | `sandboxes.androidPlayStoreUnrootedImage` | published image | The same without root; empty removes the template |
 | `sandboxes.allowNodePort` | `true` | Expose sandbox ports on every node |
