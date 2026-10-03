@@ -4,10 +4,10 @@ description: Self-hosted Vishwakarma - throwaway VMs and containers on Kubernete
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.4.3
+version: 0.4.4
 
 # Version of Vishwakarma this chart deploys by default.
-appVersion: "0.4.3"
+appVersion: "0.4.4"
 
 home: https://github.com/dmdhrumilmistry/vishwakarma
 sources:
@@ -34,9 +34,9 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vishwakarma
-      image: docker.io/dmdhrumilmistry/vishwakarma:0.4.3
+      image: docker.io/dmdhrumilmistry/vishwakarma:0.4.4
     - name: android-screen
-      image: docker.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.3
+      image: docker.io/dmdhrumilmistry/vishwakarma-android-screen:0.4.4
     - name: redroid-playstore
       image: docker.io/dmdhrumilmistry/vishwakarma-redroid-playstore:12
     - name: redroid-playstore-unrooted
@@ -45,6 +45,8 @@ annotations:
     - name: Vishwakarma source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/vishwakarma
   artifacthub.io/changes: |
+    - kind: added
+      description: "macOS on Linux (installed)" template that boots a snapshot of an installed macOS (sandboxes.macosLinuxBaseImage) instead of reinstalling.
     - kind: fixed
       description: macOS on Linux uses a 3 GB guest so it fits its 4.5 GiB memory limit under software emulation (it was OOM-killed).
     - kind: changed
