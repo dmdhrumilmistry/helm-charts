@@ -4,7 +4,7 @@ description: Self-hosted VaanarSena - open source device management (MDM) for iO
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.6.0
+version: 0.6.1
 
 # Version of VaanarSena this chart deploys by default.
 appVersion: "0.5.0"
@@ -39,9 +39,5 @@ annotations:
     - name: VaanarSena source (Apache-2.0)
       url: https://github.com/dmdhrumilmistry/VaanarSena
   artifacthub.io/changes: |
-    - kind: changed
-      description: The server image moves from ghcr.io to Docker Hub (docker.io/dmdhrumilmistry/vaanarsena), which anyone can pull without logging in.
-    - kind: changed
-      description: Deploys VaanarSena 0.5.0, with compliance webhooks for conditional access and OpenID Connect single sign-on (configure SSO through extraEnv).
-    - kind: security
-      description: VaanarSena 0.5.0 hardens BYOD handling when a device is reclassified as personal; its two database migrations run on start.
+    - kind: added
+      description: ingress.entryPoints (Traefik) to publish VaanarSena on extra entrypoints, for example IPv6 through a host TCP proxy when k3s is IPv4-only. Defaults to websecure, so nothing changes unless set.
