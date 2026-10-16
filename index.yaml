@@ -226,6 +226,49 @@ entries:
     version: 0.1.0
   vaanarsena:
   - annotations:
+      artifacthub.io/changes: |-
+        - kind: changed
+          description: The server image moves from ghcr.io to Docker Hub (docker.io/dmdhrumilmistry/vaanarsena), which anyone can pull without logging in.
+        - kind: changed
+          description: Deploys VaanarSena 0.5.0, with compliance webhooks for conditional access and OpenID Connect single sign-on (configure SSO through extraEnv).
+        - kind: security
+          description: VaanarSena 0.5.0 hardens BYOD handling when a device is reclassified as personal; its two database migrations run on start.
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: docker.io/dmdhrumilmistry/vaanarsena:0.5.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.5.0
+    created: "2026-10-16T11:53:55.01452699Z"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: 582b7bfbd6e9baf560acadfb008807d70bee2224ee6144b2ffd20e07e5b25407
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.6.0.tgz
+    version: 0.6.0
+  - annotations:
       artifacthub.io/changes: |
         - kind: changed
           description: Deploys VaanarSena 0.4.0, with a redesigned console (light, dark and system themes) and the new emblem.
@@ -1223,4 +1266,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-03T18:31:47.0599453+05:30"
+generated: "2026-10-16T11:53:55.013872071Z"

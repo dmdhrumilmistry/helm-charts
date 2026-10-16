@@ -14,7 +14,7 @@ global:
   imagePullSecrets: []
 
 image:
-  registry: ghcr.io
+  registry: docker.io
   repository: dmdhrumilmistry/vaanarsena
   # -- Defaults to the chart appVersion.
   tag: ""

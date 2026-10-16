@@ -135,6 +135,29 @@ without a restart. Validation errors are logged and leave the last good
 state in place. Format reference:
 [manifests.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/manifests.md).
 
+## Single sign-on and webhooks
+
+Single sign-on with your identity provider (Entra ID, Okta, Google, Keycloak
+and others) is set through `extraEnv`. Keep the client secret in a Secret:
+
+```yaml
+extraEnv:
+  - {name: VS_OIDC_ISSUER, value: "https://login.microsoftonline.com/<tenant-id>/v2.0"}
+  - {name: VS_OIDC_CLIENT_ID, value: "<application-id>"}
+  - name: VS_OIDC_CLIENT_SECRET
+    valueFrom: {secretKeyRef: {name: vaanarsena-oidc, key: clientSecret}}
+  - {name: VS_OIDC_NAME, value: Microsoft}
+  - {name: VS_OIDC_ADMIN_GROUPS, value: "<mdm-admins-group-id>"}
+```
+
+Register `https://<publicHost>/api/v1/auth/oidc/callback` as the redirect URI.
+See [sso.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/sso.md).
+
+Compliance webhooks (for conditional access) need no values: add them in the
+console under Settings > Webhooks. The pod must be able to reach the receivers;
+if you restrict egress, allow them. See
+[webhooks.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/webhooks.md).
+
 ## Values
 
 | Key | Default | Description |
@@ -142,7 +165,7 @@ state in place. Format reference:
 | `publicHost` | `""` | **Required.** DNS name devices use. |
 | `publicUrl` | `https://<publicHost>` | Override the public URL. |
 | `orgName` | `VaanarSena` | Shown in profiles, certificates and the console. |
-| `image.repository` / `image.tag` | `dmdhrumilmistry/vaanarsena` / appVersion | Server image on `ghcr.io`. |
+| `image.repository` / `image.tag` | `dmdhrumilmistry/vaanarsena` / appVersion | Server image on Docker Hub (`docker.io`). |
 | `replicaCount` | `1` | The server is stateless; scale freely. |
 | `secretKey` | generated | At-rest encryption and session key, 32+ chars. |
 | `existingSecret` | `""` | Secret with `secretKey`, `adminPassword`, `databaseUrl`. |
