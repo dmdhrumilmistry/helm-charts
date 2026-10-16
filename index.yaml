@@ -226,6 +226,45 @@ entries:
     version: 0.1.0
   vaanarsena:
   - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: ingress.entryPoints (Traefik) to publish VaanarSena on extra entrypoints, for example IPv6 through a host TCP proxy when k3s is IPv4-only. Defaults to websecure, so nothing changes unless set.
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: docker.io/dmdhrumilmistry/vaanarsena:0.5.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.5.0
+    created: "2026-10-16T13:31:03.638329846Z"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: 06c10f3a417ff5ef278d0439b3970be54b11919b7c74a421ee65490efe3d74eb
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.6.1.tgz
+    version: 0.6.1
+  - annotations:
       artifacthub.io/changes: |-
         - kind: changed
           description: The server image moves from ghcr.io to Docker Hub (docker.io/dmdhrumilmistry/vaanarsena), which anyone can pull without logging in.
@@ -1266,4 +1305,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-16T11:53:55.013872071Z"
+generated: "2026-10-16T13:31:03.637578794Z"

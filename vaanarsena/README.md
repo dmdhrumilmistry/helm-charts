@@ -180,6 +180,7 @@ if you restrict egress, allow them. See
 | `ingress.tls.secretName` | `<fullname>-tls` | TLS certificate Secret. |
 | `ingress.clientCertificates` | `true` | Request and forward device client certificates (ingress-nginx). |
 | `ingress.httpRedirect` | `true` | Traefik: redirect plain HTTP on `publicHost` to HTTPS (otherwise `http://` gets a 404). |
+| `ingress.entryPoints` | `[websecure]` | Traefik only: entrypoints the HTTPS route is attached to. Add one to publish VaanarSena on it too (for example IPv6 through a host TCP proxy). |
 | `postgresql.enabled` | `true` | Bundled PostgreSQL 17. |
 | `postgresql.persistence.size` | `10Gi` | Database volume. |
 | `externalDatabase.url` / `existingSecret` | `""` | Use your own PostgreSQL 14+. |

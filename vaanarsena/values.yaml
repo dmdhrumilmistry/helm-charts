@@ -120,6 +120,11 @@ ingress:
   # to the server. Needed for Windows and Linux management behind an ingress.
   # Apple devices authenticate by request signature and do not need this.
   clientCertificates: true
+  # -- Traefik only: entrypoints the HTTPS route listens on. Add an entrypoint
+  # here to publish VaanarSena on it too, e.g. one fed by a TCP proxy on the
+  # host's IPv6 address when k3s is IPv4-only.
+  entryPoints:
+    - websecure
   # -- Traefik only: redirect plain HTTP on publicHost to HTTPS. ingress-nginx
   # redirects by default when TLS is configured.
   httpRedirect: true

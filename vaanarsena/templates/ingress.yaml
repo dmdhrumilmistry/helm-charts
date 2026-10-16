@@ -20,7 +20,7 @@ metadata:
     nginx.ingress.kubernetes.io/auth-tls-pass-certificate-to-upstream: "true"
     {{- end }}
     {{- else if eq $ctrl "traefik" }}
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ join "," (.Values.ingress.entryPoints | default (list "websecure")) | quote }}
     traefik.ingress.kubernetes.io/router.tls: "true"
     {{- if .Values.ingress.clientCertificates }}
     # See templates/traefik.yaml: request client certificates and forward them.
