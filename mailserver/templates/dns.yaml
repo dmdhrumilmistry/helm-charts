@@ -1,0 +1,330 @@
+{{- if .Values.dns.publish.enabled }}
+{{- include "mailserver.validate" . -}}
+{{- $fullName := printf "%s-dns" (include "mailserver.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- $pub := .Values.dns.publish -}}
+{{- $domain := include "mailserver.domain" . -}}
+{{- $detectFromService := and (not .Values.network.hostNetwork) (not $pub.addresses.ipv6) (not $pub.addresses.ipv4) -}}
+{{- $image := include "mailserver.image" . -}}
+{{- if $pub.image.repository -}}
+{{- $reg := $pub.image.registry | default .Values.global.imageRegistry -}}
+{{- $image = printf "%s%s:%s" (ternary (printf "%s/" $reg) "" (ne $reg "")) $pub.image.repository ($pub.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{/*
+Keeps this deployment's records in the DNS zone. Runs every few minutes,
+so address records follow a changing (for example ISP-assigned) IPv6
+prefix within one schedule interval.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+data:
+  publish.sh: |
+    #!/bin/bash
+    # Reconciles the mail records in a Cloudflare zone. Only touches what
+    # it owns (see the dns section of values.yaml); safe to run any time.
+    set -euo pipefail
+
+    API=https://api.cloudflare.com/client/v4
+    ZONE={{ $pub.cloudflare.zone | default $domain | quote }}
+    DOMAIN={{ $domain | quote }}
+    HOST={{ include "mailserver.hostname" . | quote }}
+    WEBMAIL={{ ternary (include "mailserver.webmailHost" .) "" (and .Values.webmail.enabled $pub.webmail) | quote }}
+    TTL={{ int $pub.ttl }}
+    DRY_RUN={{ ternary "1" "0" $pub.dryRun }}
+    TAG="managed by the mailserver Helm chart (release {{ .Release.Namespace }}/{{ .Release.Name }})"
+    changes=0
+
+    log() { echo "$*"; }
+    die() { echo "ERROR: $*" >&2; exit 1; }
+
+    cf() {  # cf METHOD PATH [curl args...]
+      local method=$1 path=$2 out; shift 2
+      out=$(curl -sS -m 20 -X "$method" -H "Authorization: Bearer $CF_API_TOKEN" \
+        -H 'Content-Type: application/json' "$@" "$API$path") || die "cloudflare $method $path: request failed"
+      [ "$(jaq -r '.success' <<<"$out")" = true ] || die "cloudflare $method $path: $(jaq -c '.errors' <<<"$out")"
+      printf '%s' "$out"
+    }
+
+    # TXT values travel as quoted 255-byte strings. Normalise both sides
+    # before comparing, since Cloudflare may hand back either form.
+    txt_quote() {
+      local v=$1 out=""
+      while [ -n "$v" ]; do out="$out\"${v:0:255}\" "; v=${v:255}; done
+      printf '%s' "${out% }"
+    }
+    txt_norm() { local v=${1//\" \"/}; v=${v#\"}; printf '%s' "${v%\"}"; }
+
+    body() {  # body TYPE NAME CONTENT [PRIORITY]
+      jaq -nc --arg t "$1" --arg n "$2" --arg c "$3" --arg cm "$TAG" \
+        --argjson ttl "$TTL" --argjson prio "${4:-0}" \
+        '{type:$t, name:$n, content:$c, ttl:$ttl, comment:$cm}
+         + (if $t == "A" or $t == "AAAA" then {proxied:false} else {} end)
+         + (if $t == "MX" then {priority:$prio} else {} end)'
+    }
+
+    apply() {  # apply METHOD PATH [BODY] - honours DRY_RUN
+      changes=$((changes + 1))
+      if [ "$DRY_RUN" = 1 ]; then log "    (dry run) $1 $2 ${3:-}"; return; fi
+      if [ -n "${3:-}" ]; then cf "$1" "$2" --data "$3" >/dev/null; else cf "$1" "$2" >/dev/null; fi
+    }
+
+    records() {  # records TYPE NAME -> lines "id<TAB>content<TAB>priority"
+      cf GET "/zones/$zone/dns_records?type=$1&name=$2&per_page=100" \
+        | jaq -r '.result[] | [.id, .content, (.priority // 0 | tostring)] | join("\t")'
+    }
+
+    # Owns every TYPE record at NAME: makes the set exactly ADDRS.
+    ensure_addresses() {  # ensure_addresses TYPE NAME ADDR...
+      local type=$1 name=$2; shift 2
+      local want=" $* " have="" id content prio
+      while IFS=$'\t' read -r id content prio; do
+        [ -n "$id" ] || continue
+        if [[ $want == *" $content "* ]]; then have="$have $content "
+        else log "  $name $type $content: removing"; apply DELETE "/zones/$zone/dns_records/$id"; fi
+      done < <(records "$type" "$name")
+      for a in "$@"; do
+        if [[ $have == *" $a "* ]]; then log "  $name $type $a (unchanged)"
+        else log "  $name $type $a: creating"; apply POST "/zones/$zone/dns_records" "$(body "$type" "$name" "$a")"; fi
+      done
+    }
+
+    # Owns the TXT records at NAME that start with PREFIX; others stay.
+    ensure_txt() {  # ensure_txt NAME PREFIX VALUE
+      local name=$1 prefix=$2 value=$3 id content prio kept=""
+      while IFS=$'\t' read -r id content prio; do
+        [ -n "$id" ] || continue
+        content=$(txt_norm "$content")
+        [[ $content == "$prefix"* ]] || continue
+        if [ -z "$kept" ]; then
+          kept=$id
+          if [ "$content" = "$value" ]; then log "  $name TXT $prefix... (unchanged)"
+          else log "  $name TXT $prefix...: updating"; apply PUT "/zones/$zone/dns_records/$id" "$(body TXT "$name" "$(txt_quote "$value")")"; fi
+        else
+          log "  $name TXT: removing duplicate $prefix record"; apply DELETE "/zones/$zone/dns_records/$id"
+        fi
+      done < <(records TXT "$name")
+      if [ -z "$kept" ]; then
+        log "  $name TXT $prefix...: creating"; apply POST "/zones/$zone/dns_records" "$(body TXT "$name" "$(txt_quote "$value")")"
+      fi
+    }
+
+    # Adds an MX to HOST; other MX records are reported, never removed.
+    ensure_mx() {  # ensure_mx NAME HOST PRIORITY
+      local name=$1 host=$2 want_prio=$3 id content prio found=""
+      while IFS=$'\t' read -r id content prio; do
+        [ -n "$id" ] || continue
+        if [ "${content%.}" = "$host" ]; then
+          found=1
+          if [ "$prio" = "$want_prio" ]; then log "  $name MX $want_prio $host (unchanged)"
+          else log "  $name MX $host: priority $prio -> $want_prio"; apply PUT "/zones/$zone/dns_records/$id" "$(body MX "$name" "$host" "$want_prio")"; fi
+        else
+          log "  WARNING: $name also has MX $prio $content; mail may be delivered there instead"
+        fi
+      done < <(records MX "$name")
+      if [ -z "$found" ]; then
+        log "  $name MX $want_prio $host: creating"; apply POST "/zones/$zone/dns_records" "$(body MX "$name" "$host" "$want_prio")"
+      fi
+    }
+
+    # Filters that may legitimately match nothing: never fatal.
+    keep() { grep "$@" || true; }
+    public6() { grep -viE '^(fe80|fc|fd|::1$|::$)' || true; }
+    public4() { grep -vE '^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|0\.)' || true; }
+
+    # --- addresses -------------------------------------------------------------
+    v6="{{ join " " $pub.addresses.ipv6 }}"
+    v4="{{ join " " $pub.addresses.ipv4 }}"
+    {{- if .Values.network.hostNetwork }}
+    {{- if .Values.network.smtpBindAddress6 }}
+    [ -n "$v6" ] || v6={{ .Values.network.smtpBindAddress6 | quote }}
+    {{- end }}
+    if [ -z "$v6" ] && [ -z "$v4" ]; then
+      # The node's stable global addresses: temporary (privacy) addresses
+      # rotate and must never be published.
+      v6=$(ip -6 -o addr show dev {{ .Values.network.hostInterface | quote }} scope global \
+        | keep -vE 'temporary|deprecated|tentative' | awk '{print $4}' | cut -d/ -f1 | public6 | xargs)
+      v4=$(ip -4 -o addr show dev {{ .Values.network.hostInterface | quote }} scope global \
+        | awk '{print $4}' | cut -d/ -f1 | public4 | xargs)
+    fi
+    {{- else if $detectFromService }}
+    sa=/var/run/secrets/kubernetes.io/serviceaccount
+    svc=$(curl -sS -m 10 --cacert $sa/ca.crt -H "Authorization: Bearer $(cat $sa/token)" \
+      "https://kubernetes.default.svc/api/v1/namespaces/{{ .Release.Namespace }}/services/{{ include "mailserver.fullname" . }}") \
+      || die "cannot read the mail Service"
+    addrs=$(jaq -r '(.status.loadBalancer.ingress // [])[].ip // empty, (.spec.externalIPs // [])[]' <<<"$svc")
+    v6=$(keep ':' <<<"$addrs" | public6 | xargs)
+    v4=$(keep -v ':' <<<"$addrs" | public4 | xargs)
+    {{- end }}
+    {{- if not $pub.addresses.publishIPv4 }}
+    v4=""
+    {{- end }}
+
+    # --- zone --------------------------------------------------------------------
+    zone=$(cf GET "/zones?name=$ZONE" | jaq -r '.result[0].id // empty')
+    [ -n "$zone" ] || die "zone $ZONE not found: the token needs Zone:Zone:Read on it"
+    [ "$DRY_RUN" = 1 ] && log "DRY RUN: no changes will be made"
+    log "zone $ZONE, mail host $HOST, IPv6 [${v6:-none}] IPv4 [${v4:-none}]"
+
+    # --- records -----------------------------------------------------------------
+    if [ -n "$v6" ] || [ -n "$v4" ]; then
+      [ -z "$v6" ] || ensure_addresses AAAA "$HOST" $v6
+      [ -z "$v4" ] || ensure_addresses A "$HOST" $v4
+      if [ -n "$WEBMAIL" ]; then
+        w6="{{ join " " $pub.webmailAddresses.ipv6 }}"; w4="{{ join " " $pub.webmailAddresses.ipv4 }}"
+        if [ -z "$w6" ] && [ -z "$w4" ]; then w6=$v6; w4=$v4; fi
+        [ -z "$w6" ] || ensure_addresses AAAA "$WEBMAIL" $w6
+        [ -z "$w4" ] || ensure_addresses A "$WEBMAIL" $w4
+      fi
+    else
+      log "  WARNING: no public address found for $HOST; address records left as they are"
+    fi
+
+    ensure_mx "$DOMAIN" "$HOST" {{ int .Values.dns.mxPriority }}
+    ensure_txt "$DOMAIN" "v=spf1" {{ include "mailserver.spfRecord" . | quote }}
+    {{- if .Values.security.rspamd.enabled }}
+    pub=$(openssl pkey -in /dkim/{{ include "mailserver.dkimSecretKey" . }} -pubout -outform DER | base64 -w0)
+    ensure_txt "{{ .Values.dkim.selector }}._domainkey.$DOMAIN" "v=DKIM1" "v=DKIM1; k=rsa; p=$pub"
+    {{- end }}
+    ensure_txt "_dmarc.$DOMAIN" "v=DMARC1" {{ include "mailserver.dmarcRecord" . | quote }}
+    ensure_txt "_smtp._tls.$DOMAIN" "v=TLSRPTv1" {{ include "mailserver.tlsrptRecord" . | quote }}
+    {{- if .Values.mtaSts.enabled }}
+    ensure_txt "_mta-sts.$DOMAIN" "v=STSv1" "v=STSv1; id={{ include "mailserver.mtaStsId" . }}"
+    {{- end }}
+
+    log "done: $changes change(s)"
+{{- if $detectFromService }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+---
+# Read the mail Service's load balancer address, nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+rules:
+  - apiGroups: [""]
+    resources: [services]
+    resourceNames: [{{ include "mailserver.fullname" . | quote }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $fullName }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dns
+spec:
+  schedule: {{ $pub.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 180
+      template:
+        metadata:
+          labels:
+            {{- include "mailserver.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: dns
+        spec:
+          restartPolicy: Never
+          {{- include "mailserver.imagePullSecrets" . | nindent 10 }}
+          {{- if $detectFromService }}
+          serviceAccountName: {{ $fullName }}
+          {{- else }}
+          automountServiceAccountToken: false
+          {{- end }}
+          {{- if .Values.network.hostNetwork }}
+          # To see the node's own addresses.
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: publish
+              image: {{ $image }}
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/bash", "/scripts/publish.sh"]
+              env:
+                - name: CF_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $pub.cloudflare.apiTokenSecret }}
+                      key: {{ $pub.cloudflare.apiTokenSecretKey }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+                {{- if .Values.security.rspamd.enabled }}
+                - name: dkim
+                  mountPath: /dkim
+                  readOnly: true
+                {{- end }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              {{- with $pub.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ $fullName }}
+            - name: tmp
+              emptyDir: {}
+            {{- if .Values.security.rspamd.enabled }}
+            - name: dkim
+              secret:
+                secretName: {{ include "mailserver.dkimSecretName" . }}
+                # Group-readable for the unprivileged job user only.
+                defaultMode: 0440
+            {{- end }}
+{{- end }}

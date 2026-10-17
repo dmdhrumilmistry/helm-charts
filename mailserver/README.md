@@ -19,6 +19,7 @@ place yours needs to live.
 - [Accounts and aliases](#accounts-and-aliases)
 - [TLS](#tls)
 - [Webmail](#webmail)
+- [Publishing DNS records](#publishing-dns-records)
 - [Values](#values)
 - [Operating it](#operating-it)
 
@@ -343,6 +344,53 @@ from the ingress controller's `X-Forwarded-For`. The default
 
 Turn it off with `webmail.enabled=false`; nothing else depends on it.
 
+## Publishing DNS records
+
+With `dns.publish.enabled`, a CronJob keeps the records from the
+[DNS records](#dns-records) table in your zone (Cloudflare for now),
+re-checking every 5 minutes. Address records follow your current
+address, so a dynamic IPv6 prefix stops being a problem.
+
+```yaml
+dns:
+  dmarc:
+    policy: none          # tighten to quarantine, then reject
+  publish:
+    enabled: true
+    dryRun: true          # first run: log what it would change
+    cloudflare:
+      apiTokenSecret: cloudflare-api-token   # Zone:DNS:Edit + Zone:Zone:Read
+```
+
+Run it once without waiting for the schedule:
+
+```bash
+kubectl create job -n mail --from=cronjob/<release>-mailserver-dns dns-now
+kubectl logs -n mail job/dns-now
+```
+
+It only touches what it owns: the A/AAAA records of the mail and
+webmail hostnames, an MX pointing at the mail hostname, and the TXT
+records starting `v=spf1`, `v=DKIM1`, `v=DMARC1`, `v=TLSRPTv1` and
+`v=STSv1` at their names. Other records, including other MX and TXT
+records at the apex, are left alone (other MX records are reported in
+the log). Records carry a comment naming the release. Reverse DNS (PTR)
+lives with whoever owns the address block and cannot be set from here.
+
+## Mail headers
+
+- **DKIM**: everything your users send is signed (Rspamd, `dkim.selector`).
+- **ARC** (`security.rspamd.arc`): mail passing through (forwards, lists)
+  is sealed, so the next hop can trust the checks made here even after
+  forwarding breaks SPF. Uses the DKIM key; no extra record.
+- **Authentication-Results** (`security.rspamd.authenticationResults`):
+  inbound mail carries the SPF, DKIM, DMARC and ARC verdicts, without
+  naming the logged-in user.
+- **Privacy on outbound mail**: the sender's client IP (the submission
+  `Received` line), `User-Agent`, `X-Mailer` and `X-Originating-IP` are
+  removed, and Rspamd's diagnostic headers are added to inbound mail
+  only.
+
 ## Values
 
 | Key | Default | Description |
@@ -375,6 +423,14 @@ Turn it off with `webmail.enabled=false`; nothing else depends on it.
 | `webmail.clusterNetworks` | private ranges | Trusted proxies, never banned by Fail2ban. Narrow to your pod CIDR. |
 | `webmail.ingress.className` | `""` | Ingress class; empty uses the cluster default. |
 | `security.fail2ban.ignoreNetworks` | `[]` | Extra addresses Fail2ban never bans. |
+| `dns.dmarc.policy` | `none` | `none`, `quarantine` or `reject`. |
+| `dns.dmarc.alignment` | `relaxed` | `relaxed` or `strict`. |
+| `dns.spf.extraMechanisms` | `[]` | e.g. `include:` a relay provider. |
+| `dns.publish.enabled` | `false` | Keep the records in your zone with a CronJob. |
+| `dns.publish.cloudflare.apiTokenSecret` | `""` | Required with `dns.publish.enabled`. |
+| `dns.publish.dryRun` | `false` | Log changes without making them. |
+| `security.rspamd.arc` | `true` | ARC-seal mail passing through. |
+| `security.rspamd.authenticationResults` | `true` | Add Authentication-Results to inbound mail. |
 | `mtaSts.enabled` | `false` | Publish an inbound MTA-STS policy. |
 | `mtaSts.mode` | `testing` | `testing`, `enforce` or `none`. |
 | `postfix.extraMainCf` | `""` | Extra Postfix `main.cf` lines. |

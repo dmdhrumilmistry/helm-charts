@@ -90,6 +90,36 @@ data:
         selector = "{{ .Values.dkim.selector }}";
       }
     }
+  {{- if .Values.security.rspamd.arc }}
+  # https://rspamd.com/doc/modules/arc.html
+  # Same key and selector as DKIM, so no extra DNS record.
+  rspamd-arc.conf: |
+    sign_local = true;
+    sign_authenticated = true;
+    use_domain = "header";
+    use_esld = true;
+    allow_username_mismatch = true;
+    domain {
+      {{ $domain }} {
+        path = "/tmp/docker-mailserver/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key";
+        selector = "{{ .Values.dkim.selector }}";
+      }
+    }
+  {{- end }}
+  # https://rspamd.com/doc/modules/milter_headers.html
+  # Diagnostic headers on inbound mail only: on mail your users send they
+  # would tell every recipient about the server's internals.
+  rspamd-milter_headers.conf: |
+    extended_spam_headers = true;
+    skip_local = true;
+    skip_authenticated = true;
+    {{- if .Values.security.rspamd.authenticationResults }}
+    use = ["authentication-results"];
+    authentication_results {
+      # Do not name the logged-in user in the header.
+      add_smtp_user = false;
+    }
+    {{- end }}
   {{- if .Values.network.hostNetwork }}
   # On the node's network the controller would listen on every host
   # address, public ones included, and the NetworkPolicy no longer

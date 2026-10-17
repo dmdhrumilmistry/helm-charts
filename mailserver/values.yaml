@@ -226,6 +226,14 @@ security:
     # Run outbound mail from your own users through the spam filter
     # too, catching a compromised account before receivers do.
     checkAuthenticated: false
+    # Seal mail that passes through (forwards, mailing lists) with an
+    # ARC signature, so the next hop can trust the SPF/DKIM results
+    # seen here even after forwarding breaks SPF. Uses the DKIM key and
+    # selector; no extra DNS record.
+    arc: true
+    # Stamp inbound mail with an Authentication-Results header (SPF,
+    # DKIM, DMARC, ARC verdicts) for clients and filters to read.
+    authenticationResults: true
     # Extra Rspamd override.d files, by filename. Applied after the
     # chart's own.
     overrides: {}
@@ -288,6 +296,88 @@ dkim:
   # goes out unsigned rather than wrongly signed until the record is
   # live.
   checkPubkey: true
+
+# =====================================================================
+# DNS
+#
+# The record values below feed both the sheet the init container prints
+# and, with publish.enabled, the records a CronJob keeps in your DNS
+# zone. The CronJob re-checks every few minutes, so the address records
+# follow a changing IPv6 prefix.
+#
+# It only touches what it owns: the A/AAAA records of the mail (and
+# webmail) hostname, the TXT records that start with v=spf1, v=DKIM1,
+# v=DMARC1, v=TLSRPTv1 and v=STSv1 at their names, and an MX pointing at
+# the hostname. Other records in the zone, including other MX and TXT
+# records, are left alone. PTR (reverse DNS) is not in your zone and
+# cannot be set from here.
+# =====================================================================
+dns:
+  spf:
+    # Appended before -all, e.g. include:relay.example for a relay.
+    extraMechanisms: []
+    # -all (reject) | ~all (soft fail)
+    all: "-all"
+  dmarc:
+    # What receivers do with mail failing DMARC: none (report only) |
+    # quarantine | reject. Start with none, read the reports, tighten.
+    policy: none
+    # For subdomains; empty follows policy.
+    subdomainPolicy: ""
+    # relaxed | strict. Strict requires the exact domain in SPF and DKIM.
+    alignment: relaxed
+    percent: 100
+    # Aggregate report address. Defaults to dmarc-reports@<domain>.
+    reportTo: ""
+  # TLS failure report address. Defaults to tls-reports@<domain>.
+  tlsrptReportTo: ""
+  mxPriority: 10
+
+  publish:
+    enabled: false
+    # cloudflare is the only provider so far.
+    provider: cloudflare
+    cloudflare:
+      # Secret holding an API token with Zone:DNS:Edit and Zone:Zone:Read
+      # on the zone.
+      apiTokenSecret: ""
+      apiTokenSecretKey: api-token
+      # Defaults to domain.
+      zone: ""
+    schedule: "*/5 * * * *"
+    ttl: 300
+    # Log the changes without making them.
+    dryRun: false
+    # Addresses published for the mail hostname. Empty means detect:
+    # the node interface's global addresses with network.hostNetwork,
+    # otherwise the Service's load balancer and external IPs. Private,
+    # loopback and ULA addresses are never published.
+    addresses:
+      ipv6: []
+      ipv4: []
+      # Publish A records too. Off by default: this chart is IPv6 first,
+      # and an IPv4 A record without a matching PTR hurts delivery.
+      publishIPv4: false
+    # Also publish the webmail hostname's address records. Uses the mail
+    # addresses unless webmailAddresses is set: right when the ingress
+    # controller answers on the same address (single node), wrong
+    # otherwise.
+    webmail: true
+    webmailAddresses:
+      ipv6: []
+      ipv4: []
+    image:
+      # The mail server's own image (it carries curl, openssl and a JSON
+      # processor), so nothing extra is pulled.
+      registry: ""
+      repository: ""
+      tag: ""
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
 
 # =====================================================================
 # Inbound MTA-STS

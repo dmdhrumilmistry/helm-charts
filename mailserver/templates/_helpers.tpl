@@ -134,6 +134,18 @@ work, rather than leaving a pod stuck in ContainerCreating.
 {{- if not (has .Values.network.outboundAddressPreference (list "any" "ipv4" "ipv6")) -}}
 {{- fail "network.outboundAddressPreference must be any, ipv4 or ipv6" -}}
 {{- end -}}
+{{- if not (has .Values.dns.dmarc.policy (list "none" "quarantine" "reject")) -}}
+{{- fail "dns.dmarc.policy must be none, quarantine or reject" -}}
+{{- end -}}
+{{- if and .Values.dns.dmarc.subdomainPolicy (not (has .Values.dns.dmarc.subdomainPolicy (list "none" "quarantine" "reject"))) -}}
+{{- fail "dns.dmarc.subdomainPolicy must be empty, none, quarantine or reject" -}}
+{{- end -}}
+{{- if not (has .Values.dns.dmarc.alignment (list "relaxed" "strict")) -}}
+{{- fail "dns.dmarc.alignment must be relaxed or strict" -}}
+{{- end -}}
+{{- if and .Values.dns.publish.enabled (not .Values.dns.publish.cloudflare.apiTokenSecret) -}}
+{{- fail "dns.publish.cloudflare.apiTokenSecret is required with dns.publish.enabled" -}}
+{{- end -}}
 {{- if not (has .Values.mtaSts.mode (list "testing" "enforce" "none")) -}}
 {{- fail "mtaSts.mode must be testing, enforce or none" -}}
 {{- end -}}
@@ -263,6 +275,35 @@ max_age: {{ int .Values.mtaSts.maxAge }}
 
 {{/*
 =====================================================================
+DNS record values
+
+Shared by the printed sheet and the DNS publisher, so the two cannot
+disagree.
+=====================================================================
+*/}}
+{{- define "mailserver.spfRecord" -}}
+{{- $parts := concat (list "v=spf1" "mx") (.Values.dns.spf.extraMechanisms | default list) (list .Values.dns.spf.all) -}}
+{{- join " " $parts -}}
+{{- end }}
+
+{{- define "mailserver.dmarcRecord" -}}
+{{- $d := .Values.dns.dmarc -}}
+{{- $domain := include "mailserver.domain" . -}}
+{{- $align := ternary "s" "r" (eq $d.alignment "strict") -}}
+{{- $parts := list "v=DMARC1" (printf "p=%s" $d.policy) -}}
+{{- with $d.subdomainPolicy }}{{ $parts = append $parts (printf "sp=%s" .) }}{{ end -}}
+{{- if lt (int $d.percent) 100 }}{{ $parts = append $parts (printf "pct=%d" (int $d.percent)) }}{{ end -}}
+{{- $parts = append $parts (printf "rua=mailto:%s" ($d.reportTo | default (printf "dmarc-reports@%s" $domain))) -}}
+{{- $parts = concat $parts (list (printf "adkim=%s" $align) (printf "aspf=%s" $align)) -}}
+{{- join "; " $parts -}}
+{{- end }}
+
+{{- define "mailserver.tlsrptRecord" -}}
+{{- printf "v=TLSRPTv1; rua=mailto:%s" (.Values.dns.tlsrptReportTo | default (printf "tls-reports@%s" (include "mailserver.domain" .))) -}}
+{{- end }}
+
+{{/*
+=====================================================================
 DNS records
 
 The zone entries this deployment needs, rendered for the configured
@@ -278,13 +319,13 @@ only place the public half can be derived.
 
 {{ $host }}.  AAAA  <MAIL-IPv6>
 {{ $host }}.  A     <MAIL-IPv4>     (only if you also accept mail over IPv4)
-{{ $domain }}.  MX    10 {{ $host }}.
-{{ $domain }}.  TXT   "v=spf1 mx -all"
+{{ $domain }}.  MX    {{ int .Values.dns.mxPriority }} {{ $host }}.
+{{ $domain }}.  TXT   "{{ include "mailserver.spfRecord" . }}"
 {{- if .Values.security.rspamd.enabled }}
 {{ .Values.dkim.selector }}._domainkey.{{ $domain }}.  TXT  "v=DKIM1; k=rsa; p=__DKIM_PUBLIC_KEY__"
 {{- end }}
-_dmarc.{{ $domain }}.  TXT   "v=DMARC1; p=none; rua=mailto:dmarc-reports@{{ $domain }}"
-_smtp._tls.{{ $domain }}.  TXT   "v=TLSRPTv1; rua=mailto:tls-reports@{{ $domain }}"
+_dmarc.{{ $domain }}.  TXT   "{{ include "mailserver.dmarcRecord" . }}"
+_smtp._tls.{{ $domain }}.  TXT   "{{ include "mailserver.tlsrptRecord" . }}"
 {{- if .Values.webmail.enabled }}
 {{ include "mailserver.webmailHost" . }}.  AAAA  <INGRESS-IPv6>   (your HTTP ingress, not the mail Service)
 {{- end }}
@@ -301,8 +342,8 @@ hosting provider, not your DNS zone):
 Then:
 - SPF "mx" covers the MX host's addresses. If outbound mail leaves from
   a different address (pod egress through a node), add it: ip6:<addr>.
-- Move DMARC from p=none to p=quarantine, then p=reject, once the
-  reports show everything you send passes.
+- Move DMARC (dns.dmarc.policy) from none to quarantine, then reject,
+  once the reports show everything you send passes.
 - Gmail and Microsoft reject IPv6 senders without a matching PTR record.
 =====================================================================
 {{- end }}
