@@ -1,0 +1,53 @@
+{{- $svc := .Values.service -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailserver.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+  {{- with $svc.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $svc.type }}
+  {{- /*
+  Address families. Left to the cluster's defaults when unset, which on
+  a dual-stack cluster still yields an IPv6 address under
+  PreferDualStack.
+  */}}
+  {{- with .Values.network.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.network.ipFamilies }}
+  ipFamilies:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $svc.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  {{- with $svc.loadBalancerClass }}
+  loadBalancerClass: {{ . | quote }}
+  {{- end }}
+  {{- with $svc.externalIPs }}
+  externalIPs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if and (has $svc.type (list "LoadBalancer" "NodePort")) $svc.externalTrafficPolicy }}
+  {{- /*
+  Local keeps the client's real address. Mail depends on it more than
+  most protocols: SPF, DNSBL lookups and Fail2ban all key on it, and a
+  masqueraded address can even match a trusted network.
+  */}}
+  externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
+  {{- end }}
+  ports:
+    {{- range (include "mailserver.ports" . | fromJsonArray) }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .name }}
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- include "mailserver.serverSelectorLabels" . | nindent 4 }}

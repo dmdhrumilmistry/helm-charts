@@ -1,0 +1,58 @@
+apiVersion: v2
+name: mailserver
+description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack clusters - Postfix, Dovecot, Rspamd, ClamAV and Fail2ban, with DKIM, MTA-STS and every domain-specific setting in values.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of docker-mailserver this chart deploys by default.
+appVersion: "16.0.1"
+
+icon: https://raw.githubusercontent.com/docker-mailserver/docker-mailserver/master/docs/content/assets/logo/dmo-logo.min.svg
+
+home: https://docker-mailserver.github.io/docker-mailserver/latest/
+sources:
+  - https://github.com/docker-mailserver/docker-mailserver
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - mail
+  - smtp
+  - imap
+  - postfix
+  - dovecot
+  - rspamd
+  - clamav
+  - fail2ban
+  - dkim
+  - mta-sts
+  - ipv6
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # This chart is MIT, and so is docker-mailserver. The components it
+  # bundles (Postfix, Dovecot, Rspamd, ClamAV, Fail2ban) are all open
+  # source; the chart contains none of their code and references the
+  # published image.
+  artifacthub.io/license: MIT
+  artifacthub.io/images: |
+    - name: docker-mailserver
+      image: ghcr.io/docker-mailserver/docker-mailserver:16.0.1
+    - name: nginx-unprivileged
+      image: nginxinc/nginx-unprivileged:1.30.6-alpine
+  artifacthub.io/links: |
+    - name: docker-mailserver source (MIT)
+      url: https://github.com/docker-mailserver/docker-mailserver
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. One required value (domain); hostname, accounts, aliases, DKIM, TLS and DNS hints are all derived from it.
+    - kind: added
+      description: IPv6 first - Service ipFamilyPolicy/ipFamilies, optional host networking, and Postfix outbound address preference and source binding.
+    - kind: added
+      description: Rspamd (spam, DKIM signing, SPF, DMARC, ARC), ClamAV, Fail2ban, postscreen and outbound MTA-STS on by default; optional inbound MTA-STS policy host.
+    - kind: added
+      description: Account passwords and the DKIM key generated on first install and preserved on upgrade. The init container prints every DNS record you need.

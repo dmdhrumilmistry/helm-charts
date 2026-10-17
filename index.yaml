@@ -85,6 +85,58 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/falco/falco-0.1.0.tgz
     version: 0.1.0
+  mailserver:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. One required value (domain); hostname, accounts, aliases, DKIM, TLS and DNS hints are all derived from it.
+        - kind: added
+          description: IPv6 first - Service ipFamilyPolicy/ipFamilies, optional host networking, and Postfix outbound address preference and source binding.
+        - kind: added
+          description: Rspamd (spam, DKIM signing, SPF, DMARC, ARC), ClamAV, Fail2ban, postscreen and outbound MTA-STS on by default; optional inbound MTA-STS policy host.
+        - kind: added
+          description: Account passwords and the DKIM key generated on first install and preserved on upgrade. The init container prints every DNS record you need.
+      artifacthub.io/images: |
+        - name: docker-mailserver
+          image: ghcr.io/docker-mailserver/docker-mailserver:16.0.1
+        - name: nginx-unprivileged
+          image: nginxinc/nginx-unprivileged:1.30.6-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: docker-mailserver source (MIT)
+          url: https://github.com/docker-mailserver/docker-mailserver
+    apiVersion: v2
+    appVersion: 16.0.1
+    created: "2026-10-17T15:34:14.1415628+05:30"
+    description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack
+      clusters - Postfix, Dovecot, Rspamd, ClamAV and Fail2ban, with DKIM, MTA-STS
+      and every domain-specific setting in values.
+    digest: 5bd82c813f079ff1c111d58b8e6fa9af1f2dd0f64d454eb55eb4428bda60af47
+    home: https://docker-mailserver.github.io/docker-mailserver/latest/
+    icon: https://raw.githubusercontent.com/docker-mailserver/docker-mailserver/master/docs/content/assets/logo/dmo-logo.min.svg
+    keywords:
+    - mail
+    - smtp
+    - imap
+    - postfix
+    - dovecot
+    - rspamd
+    - clamav
+    - fail2ban
+    - dkim
+    - mta-sts
+    - ipv6
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: mailserver
+    sources:
+    - https://github.com/docker-mailserver/docker-mailserver
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/mailserver/mailserver-0.1.0.tgz
+    version: 0.1.0
   netbird:
   - annotations:
       artifacthub.io/changes: |
@@ -1346,4 +1398,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-17T08:59:10.945629466Z"
+generated: "2026-10-17T15:34:14.1405623+05:30"

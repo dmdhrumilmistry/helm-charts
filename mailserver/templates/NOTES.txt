@@ -1,0 +1,80 @@
+{{- $fullName := include "mailserver.fullname" . -}}
+{{- $ns := .Release.Namespace -}}
+{{- $domain := include "mailserver.domain" . -}}
+{{- $host := include "mailserver.hostname" . -}}
+{{- if not .Values.existingAccountsSecret }}{{ include "mailserver.generatedSecrets" . }}{{ end -}}
+docker-mailserver {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" in namespace "{{ $ns }}".
+
+  Domain:    {{ $domain }}
+  Hostname:  {{ $host }}
+  Ports:     {{ range $i, $p := (include "mailserver.ports" . | fromJsonArray) }}{{ if $i }}, {{ end }}{{ $p.port }}/{{ $p.name }}{{ end }}
+
+1. Wait for the pod
+
+     kubectl get pods -n {{ $ns }} -l app.kubernetes.io/instance={{ .Release.Name }} -w
+{{- if and (not .Values.tls.existingSecret) .Values.tls.certManager.enabled }}
+
+   It stays in ContainerCreating until cert-manager has issued
+   {{ include "mailserver.tlsSecretName" . }}:
+
+     kubectl get certificate -n {{ $ns }} {{ $fullName }}
+{{- end }}
+
+2. Find the address to publish
+
+     kubectl get svc -n {{ $ns }} {{ $fullName }} -o wide
+{{- if .Values.network.hostNetwork }}
+
+   hostNetwork is on: publish the IPv6 address of the node the pod runs
+   on, not the Service's.
+{{- end }}
+
+3. Create the DNS records
+
+   The init container prints them with your DKIM key filled in:
+
+     kubectl logs -n {{ $ns }} {{ $fullName }}-0 -c init-config
+
+   Without the DKIM line they are:
+
+{{ include "mailserver.dnsRecords" . | replace (printf "%s._domainkey.%s.  TXT  \"v=DKIM1; k=rsa; p=__DKIM_PUBLIC_KEY__\"" .Values.dkim.selector $domain) "(DKIM: see the init-config log)" | indent 5 }}
+
+4. Read the account passwords
+{{- if .Values.existingAccountsSecret }}
+
+   From the Secret you supplied: {{ .Values.existingAccountsSecret }}
+{{- else }}
+{{ range .Values._msGenerated.accounts }}
+     # {{ .address }}
+     kubectl get secret -n {{ $ns }} {{ include "mailserver.accountsSecretName" $ }} \
+       -o go-template='{{ "{{" }}index .data "{{ .key }}" | base64decode{{ "}}" }}{{ "{{" }}"\n"{{ "}}" }}'
+{{- end }}
+{{- end }}
+
+   Mail clients log in with the full address and:
+     IMAP  {{ $host }}:993 (SSL/TLS)
+     SMTP  {{ $host }}:465 (SSL/TLS){{ if .Values.ports.submission }} or :587 (STARTTLS){{ end }}
+
+5. Check it over
+
+     helm test {{ .Release.Name }} -n {{ $ns }}
+
+   From outside the cluster, over IPv6:
+
+     openssl s_client -6 -connect {{ $host }}:25 -starttls smtp -brief </dev/null
+     dig +short AAAA {{ $host }}
+     dig +short -x <MAIL-IPv6>         # must print {{ $host }}.
+
+   Then send a message to a Gmail address and check "Show original":
+   SPF, DKIM and DMARC should all read PASS.
+{{- if not .Values.security.rspamd.enabled }}
+
+WARNING: security.rspamd.enabled is false, so outbound mail is NOT DKIM
+signed and inbound mail is not spam filtered.
+{{- end }}
+{{- if and (eq .Values.service.type "LoadBalancer") (ne .Values.service.externalTrafficPolicy "Local") (not .Values.network.hostNetwork) }}
+
+WARNING: service.externalTrafficPolicy is not Local. Clients will appear
+to connect from a node address: SPF checks fail, and Fail2ban bans the
+node instead of the attacker.
+{{- end }}

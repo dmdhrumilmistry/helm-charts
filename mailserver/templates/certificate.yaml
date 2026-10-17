@@ -1,0 +1,33 @@
+{{- if and (not .Values.tls.existingSecret) .Values.tls.certManager.enabled }}
+{{- $cm := .Values.tls.certManager -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mailserver.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "mailserver.tlsSecretName" . }}
+  dnsNames:
+    - {{ include "mailserver.hostname" . | quote }}
+    {{- range $cm.extraDnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+  privateKey:
+    algorithm: {{ $cm.privateKey.algorithm }}
+    size: {{ $cm.privateKey.size }}
+    # A fresh key on every renewal, so a leaked key expires with its
+    # certificate.
+    rotationPolicy: Always
+  {{- with $cm.duration }}
+  duration: {{ . }}
+  {{- end }}
+  {{- with $cm.renewBefore }}
+  renewBefore: {{ . }}
+  {{- end }}
+  issuerRef:
+    name: {{ $cm.issuerRef.name }}
+    kind: {{ $cm.issuerRef.kind }}
+    group: {{ $cm.issuerRef.group }}
+{{- end }}
