@@ -212,8 +212,8 @@ Relay through a provider that accepts submissions on 587:
 ```yaml
 extraEnv:
   DEFAULT_RELAY_HOST: "[smtp.relay.example]:587"
-  RELAY_USER: "user"
-  RELAY_PASSWORD: "password"   # prefer a Secret-backed values file
+  RELAY_USER: "<relay-username>"
+  RELAY_PASSWORD: "<relay-password>"   # keep the real value out of version control
 ```
 
 SPF must then include the relay provider instead of (or as well as) your

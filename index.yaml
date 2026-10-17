@@ -111,11 +111,11 @@ entries:
           url: https://github.com/docker-mailserver/docker-mailserver
     apiVersion: v2
     appVersion: 16.0.1
-    created: "2026-10-17T22:10:55.4995131+05:30"
+    created: "2026-10-17T23:08:24.6186542+05:30"
     description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack
       clusters - Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM,
       MTA-STS and every domain-specific setting in values.
-    digest: e0f3c6469a9a0bbe3849f321007b80f6e6f68e54666d8aca47607e1c69aa5b03
+    digest: 7b3a4880b76fcfe15f1edef6bb2a709dd9fd6dec0483cc4aa663be88df2cc6d3
     home: https://docker-mailserver.github.io/docker-mailserver/latest/
     icon: https://raw.githubusercontent.com/docker-mailserver/docker-mailserver/master/docs/content/assets/logo/dmo-logo.min.svg
     keywords:
@@ -1404,4 +1404,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-17T22:10:55.4987994+05:30"
+generated: "2026-10-17T23:08:24.6169941+05:30"
