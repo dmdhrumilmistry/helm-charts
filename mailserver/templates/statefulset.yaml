@@ -37,6 +37,9 @@
       "SPOOF_PROTECTION" (ternary "1" "0" $sec.spoofProtection)
       "ENABLE_MTA_STS" (ternary "1" "0" $sec.outboundMtaSts)
 -}}
+{{- if .Values.network.hostNetwork -}}
+{{- $_ := set $env "NETWORK_INTERFACE" .Values.network.hostInterface -}}
+{{- end -}}
 {{- $env = mergeOverwrite $env (.Values.extraEnv | default dict) -}}
 apiVersion: apps/v1
 kind: StatefulSet
@@ -116,6 +119,8 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+              # To hand the DKIM key to the Rspamd user.
+              add: [CHOWN]
           resources:
             requests:
               cpu: 10m
@@ -158,9 +163,9 @@ spec:
               protocol: TCP
             {{- end }}
           # docker-mailserver's own check: every supervised service it
-          # enabled (Postfix, Dovecot, Rspamd, ClamAV, Fail2ban, ...) is
-          # RUNNING. ClamAV loads its signatures on first start, which
-          # can take minutes on a slow volume.
+          # enabled (Postfix, Dovecot, Rspamd, Fail2ban, ...) is
+          # RUNNING. ClamAV, if enabled, loads its signatures on first
+          # start, which can take minutes on a slow volume.
           startupProbe:
             exec:
               command: ["dms-healthcheck"]

@@ -113,6 +113,9 @@ work, rather than leaving a pod stuck in ContainerCreating.
 {{- if and (not .Values.existingAccountsSecret) (not .Values.accounts) -}}
 {{- fail "at least one entry in accounts is required: docker-mailserver will not start without one" -}}
 {{- end -}}
+{{- if and .Values.network.hostNetwork (not .Values.network.hostInterface) -}}
+{{- fail "network.hostInterface is required with network.hostNetwork: the node's main interface, e.g. ens33 (see ip -br addr)" -}}
+{{- end -}}
 {{- if not (has .Values.network.inetProtocols (list "all" "ipv4" "ipv6")) -}}
 {{- fail "network.inetProtocols must be all, ipv4 or ipv6" -}}
 {{- end -}}

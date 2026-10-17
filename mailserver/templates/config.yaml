@@ -84,6 +84,13 @@ data:
         selector = "{{ .Values.dkim.selector }}";
       }
     }
+  {{- if .Values.network.hostNetwork }}
+  # On the node's network the controller would listen on every host
+  # address, public ones included, and the NetworkPolicy no longer
+  # applies. Keep it on loopback; kubectl port-forward still reaches it.
+  rspamd-worker-controller.inc: |
+    bind_socket = "127.0.0.1:11334";
+  {{- end }}
   {{- range $file, $content := .Values.security.rspamd.overrides }}
   rspamd-{{ $file }}: |
     {{- $content | nindent 4 }}
@@ -110,9 +117,13 @@ data:
 
     {{- if .Values.security.rspamd.enabled }}
 
-    # docker-mailserver chowns this to the Rspamd user at startup.
+    # Owned by Rspamd from the start: docker-mailserver checks the key's
+    # ownership before it gets round to fixing it, and warns otherwise.
+    # Mode first, owner last: once the file is Rspamd's, root without
+    # CAP_FOWNER can no longer chmod it.
     install -m 0600 /chart/dkim/{{ include "mailserver.dkimSecretKey" . }} \
       "$CFG/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key"
+    chown _rspamd:_rspamd "$CFG/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key"
     {{- end }}
 
     {{- if .Values.existingAccountsSecret }}
@@ -136,7 +147,8 @@ data:
     echo "config written to $CFG"
     {{- if .Values.security.rspamd.enabled }}
 
-    pub=$(openssl pkey -in "$CFG/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key" -pubout -outform DER | base64 -w0)
+    # From the Secret's copy: the installed one now belongs to Rspamd.
+    pub=$(openssl pkey -in /chart/dkim/{{ include "mailserver.dkimSecretKey" . }} -pubout -outform DER | base64 -w0)
     echo
     sed "s|__DKIM_PUBLIC_KEY__|$pub|" /chart/config/dns-records.txt
     {{- else }}

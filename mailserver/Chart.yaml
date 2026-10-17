@@ -1,6 +1,6 @@
 apiVersion: v2
 name: mailserver
-description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack clusters - Postfix, Dovecot, Rspamd, ClamAV and Fail2ban, with DKIM, MTA-STS and every domain-specific setting in values.
+description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack clusters - Postfix, Dovecot, Rspamd and Fail2ban, with DKIM, MTA-STS and every domain-specific setting in values.
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
@@ -53,6 +53,6 @@ annotations:
     - kind: added
       description: IPv6 first - Service ipFamilyPolicy/ipFamilies, optional host networking, and Postfix outbound address preference and source binding.
     - kind: added
-      description: Rspamd (spam, DKIM signing, SPF, DMARC, ARC), ClamAV, Fail2ban, postscreen and outbound MTA-STS on by default; optional inbound MTA-STS policy host.
+      description: Rspamd (spam, DKIM signing, SPF, DMARC, ARC), Fail2ban, postscreen and outbound MTA-STS on by default; ClamAV and an inbound MTA-STS policy host optional.
     - kind: added
       description: Account passwords and the DKIM key generated on first install and preserved on upgrade. The init container prints every DNS record you need.

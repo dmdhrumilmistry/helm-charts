@@ -19,7 +19,7 @@ helm search repo dmdhrumilmistry
 | [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
 | [vaanarsena](vaanarsena/) | 0.7.0 | 0.6.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
 | [vishwakarma](vishwakarma/) | 0.4.7 | 0.4.6 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
-| [mailserver](mailserver/) | 0.1.0 | 16.0.1 | Self-hosted mail on IPv6 and dual-stack clusters with [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver): Postfix, Dovecot, Rspamd, ClamAV and Fail2ban, with DKIM, MTA-STS and the DNS records generated for your domain |
+| [mailserver](mailserver/) | 0.1.0 | 16.0.1 | Self-hosted mail on IPv6 and dual-stack clusters with [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver): Postfix, Dovecot, Rspamd and Fail2ban, with DKIM, MTA-STS and the DNS records generated for your domain |
 
 ### netbird
 
@@ -170,7 +170,7 @@ helm install mail dmdhrumilmistry/mailserver   --namespace mail --create-namespa
 ```
 
 Runs docker-mailserver with Rspamd (spam filtering, DKIM signing, SPF,
-DMARC and ARC), ClamAV, Fail2ban and postscreen on, behind a Service
+DMARC and ARC), Fail2ban and postscreen on, behind a Service
 that takes IPv6 wherever the cluster offers it. The hostname, accounts,
 aliases, DKIM key and TLS certificate all derive from `domain`, and the
 init container prints every DNS record you need with your DKIM key

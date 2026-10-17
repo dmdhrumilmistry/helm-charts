@@ -2,8 +2,8 @@
 
 A self-hosted mail server for Kubernetes, built for IPv6 and dual-stack
 clusters, using [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver)
-(DMS): Postfix, Dovecot, Rspamd, ClamAV, Fail2ban and postscreen in one
-pod, every one of them open source.
+(DMS): Postfix, Dovecot, Rspamd, Fail2ban and postscreen in one pod,
+every one of them open source. ClamAV is available but off by default.
 
 The chart has one required value, `domain`. The hostname, postmaster
 address, default accounts and aliases, DKIM signing domain, TLS
@@ -86,7 +86,7 @@ unencrypted. Nothing needs 110 (plain POP3).
 |---|---|---|---|
 | **25** | TCP | Any address | Delivering mail to other servers. **Many clouds block this by default**: GCP blocks it outright, AWS and Azure throttle or block it until you file a request. Without it you can receive but not send; see [relaying](#if-outbound-25-is-blocked). |
 | 53 | UDP, TCP | Your resolvers | MX, SPF, DKIM, DMARC, MTA-STS and blocklist lookups. TCP is needed too: DKIM and DNSSEC answers often exceed UDP limits. |
-| 443 | TCP | Internet | ClamAV signature updates (`database.clamav.net`), Rspamd map updates, and fetching other domains' MTA-STS policies. |
+| 443 | TCP | Internet | Rspamd map updates, fetching other domains' MTA-STS policies, and ClamAV signature updates (`database.clamav.net`) if you enable it. |
 
 ### ICMPv6
 
@@ -106,7 +106,7 @@ ports in the inbound table above.
 
 | Port | What |
 |---|---|
-| 11334 | Rspamd web controller and API. Binds every interface, so the NetworkPolicy is what keeps it private. Reach it with `kubectl port-forward`. |
+| 11334 | Rspamd web controller and API. Binds every pod interface, so the NetworkPolicy is what keeps it private; with `network.hostNetwork` the chart binds it to loopback instead. Reach it with `kubectl port-forward`. |
 | 11332, 11333 | Rspamd milter and scanner workers (localhost only). |
 | 6379 | Redis for Rspamd (localhost only). |
 
@@ -175,6 +175,7 @@ ipv4` so Postfix delivers over IPv4 until it does.
 ```yaml
 network:
   hostNetwork: true
+  hostInterface: ens33              # the node's main interface
   smtpBindAddress6: "2001:db8::25"   # the address your PTR and SPF cover
 service:
   type: ClusterIP
@@ -189,6 +190,17 @@ hosts often carry several IPv6 addresses (including temporary privacy
 addresses), and Postfix would otherwise pick one per connection. The
 cost is that mail is tied to one node, the NetworkPolicy no longer
 applies, and Fail2ban bans land in the node's firewall.
+
+Every port DMS listens on is then open on the node, including 143
+(IMAP with STARTTLS, which DMS always enables); `ports.*` only shapes
+the Service. Logins on 143 still require TLS, but close it at the node
+or router firewall if you want the surface to match the
+[port table](#ports). The chart binds Rspamd's controller to loopback
+in this mode so 11334 never reaches the node's public addresses.
+
+`network.hostInterface` is required in this mode: docker-mailserver
+reads its own address from that interface and assumes `eth0`
+otherwise.
 
 ### If outbound 25 is blocked
 
@@ -238,7 +250,7 @@ All on by default unless noted.
 | Tool | What it does | Value |
 |---|---|---|
 | **Rspamd** | Spam scoring, Bayes learning from the Junk folder, DKIM signing of outbound mail, SPF, DKIM, DMARC and ARC checks on inbound mail. Replaces the older OpenDKIM/OpenDMARC/SpamAssassin/Amavis stack, which the chart turns off. | `security.rspamd` |
-| **ClamAV** | Rejects mail carrying known malware. Needs about 1.5 GiB of memory. | `security.clamav.enabled` |
+| **ClamAV** | Rejects mail carrying known malware. **Off**: the large senders already scan outbound mail, so it rarely catches anything, and it needs about 1.5 GiB of memory. Raise `resources.limits.memory` to 3Gi if you enable it. | `security.clamav.enabled` |
 | **Fail2ban** | Bans addresses after repeated failed logins on SMTP and IMAP. Needs `NET_ADMIN`/`NET_RAW` and the real client address. | `security.fail2ban` |
 | **postscreen** | Screens SMTP clients before Postfix talks to them, dropping bots that speak out of turn. | `security.postscreenAction` |
 | **DNS blocklists** | postscreen checks Spamhaus and others. **Off**: free tiers refuse queries via public resolvers; enable with `dnsConfig` pointing at your own recursive resolver. | `security.dnsbl` |
@@ -319,6 +331,7 @@ restart.
 | `network.outboundAddressPreference` | `any` | Family Postfix tries first for delivery. |
 | `network.smtpBindAddress6` | `""` | Source IPv6 for outbound mail (host networking). |
 | `network.hostNetwork` | `false` | Use the node's network stack. |
+| `network.hostInterface` | `""` | Required with `hostNetwork`: the node's main interface. |
 | `ports.*` | 465, 587, 993 on | Which client ports to publish. 25 is always on. |
 | `service.type` | `LoadBalancer` | |
 | `service.externalTrafficPolicy` | `Local` | Keep it `Local`. |
@@ -334,8 +347,8 @@ restart.
 | `postfix.extraMainCf` | `""` | Extra Postfix `main.cf` lines. |
 | `dovecot.extraConfig` | `""` | Extra Dovecot config (2.4 syntax). |
 | `extraEnv` | `{}` | Any other [DMS environment variable](https://docker-mailserver.github.io/docker-mailserver/latest/config/environment/). |
-| `persistence.size` | `20Gi` | Mailboxes, queue, Rspamd and ClamAV state, logs. |
-| `resources` | 1Gi request, 3Gi limit | Drop the limit to 1Gi with ClamAV off. |
+| `persistence.size` | `20Gi` | Mailboxes, queue, Rspamd state, logs. |
+| `resources` | 512Mi request, 1Gi limit | Raise the limit to 3Gi with ClamAV on. |
 | `networkPolicy.enabled` | `true` | Admit only the published ports. |
 | `dnsPolicy`, `dnsConfig` | | Point Rspamd at your own resolver. |
 

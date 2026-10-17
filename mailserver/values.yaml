@@ -12,8 +12,9 @@
 # derived from it, so nothing here names a real domain.
 #
 # Bundles Postfix (SMTP), Dovecot (IMAP), Rspamd (spam filtering, DKIM
-# signing, SPF/DMARC/ARC checks), ClamAV (antivirus), Fail2ban (brute
-# force bans) and postscreen (bot filtering), all open source.
+# signing, SPF/DMARC/ARC checks), Fail2ban (brute force bans) and
+# postscreen (bot filtering), all open source. ClamAV (antivirus) is
+# available but off.
 #
 # LICENSING: this chart is MIT, and so is docker-mailserver.
 # =====================================================================
@@ -131,6 +132,10 @@ network:
   # out, at the cost of pinning mail to one node (use nodeSelector).
   # With Fail2ban on, bans then land in the node's firewall.
   hostNetwork: false
+  # Required with hostNetwork: the node's main interface (ip -br addr),
+  # e.g. ens33 or enp1s0. docker-mailserver reads its own address from
+  # it and assumes eth0 otherwise, which a host rarely has.
+  hostInterface: ""
 
 # =====================================================================
 # Ports
@@ -227,10 +232,12 @@ security:
       # actions.conf: |
       #   reject = 15;
 
-  # Antivirus. Needs about 1.5 GiB of memory on its own; turn it off on
-  # a small node and resources.limits.memory can drop to 1Gi.
+  # Antivirus. Off: it only catches already-known malware, which the
+  # large senders scan for before mail leaves them, and it needs about
+  # 1.5 GiB of memory on its own. If you turn it on, raise
+  # resources.limits.memory to 3Gi.
   clamav:
-    enabled: true
+    enabled: false
 
   # Bans addresses that fail logins repeatedly. Needs NET_ADMIN and
   # NET_RAW, and only works when the real client address reaches the
@@ -344,7 +351,7 @@ logLevel: info
 # Persistence
 #
 # One volume, split into mailboxes (/var/mail), service state such as
-# the queue, Rspamd's Bayes data and ClamAV signatures
+# the queue, Rspamd's Bayes data and, if enabled, ClamAV signatures
 # (/var/mail-state), and logs (/var/log/mail). Configuration is not on
 # it: that is rebuilt from values on every start.
 # =====================================================================
@@ -358,10 +365,10 @@ persistence:
 
 resources:
   requests:
-    cpu: 200m
-    memory: 1Gi
+    cpu: 100m
+    memory: 512Mi
   limits:
-    memory: 3Gi
+    memory: 1Gi
 
 # Restrict which ports reach the pod. Rspamd's web controller (11334)
 # listens on every interface inside the pod; this keeps it private.
