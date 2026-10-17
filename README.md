@@ -19,6 +19,7 @@ helm search repo dmdhrumilmistry
 | [adguard-home](adguard-home/) | 0.1.0 | 0.107.79 | Self-hosted [AdGuard Home](https://adguard.com/adguard-home.html): network-wide DNS with ad blocking and declarative local DNS rewrites |
 | [vaanarsena](vaanarsena/) | 0.7.0 | 0.6.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
 | [vishwakarma](vishwakarma/) | 0.4.7 | 0.4.6 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
+| [mailserver](mailserver/) | 0.1.0 | 16.0.1 | Self-hosted mail on IPv6 and dual-stack clusters with [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver): Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM, MTA-STS and the DNS records generated for your domain |
 
 ### netbird
 
@@ -160,6 +161,29 @@ isolated by a NetworkPolicy and deletes itself when its TTL runs out. The
 admin password and API token are generated on first install and preserved on
 upgrade. See the [chart README](vishwakarma/README.md).
 
+### mailserver
+
+One value to install, plus a cert-manager issuer for the mail hostname:
+
+```bash
+helm install mail dmdhrumilmistry/mailserver   --namespace mail --create-namespace   --set domain=example.com   --set tls.certManager.issuerRef.name=letsencrypt-dns
+```
+
+Runs docker-mailserver with Rspamd (spam filtering, DKIM signing, SPF,
+DMARC and ARC), Fail2ban, postscreen and Roundcube webmail on, behind a Service
+that takes IPv6 wherever the cluster offers it. The hostname, accounts,
+aliases, DKIM key and TLS certificate all derive from `domain`, and the
+init container prints every DNS record you need with your DKIM key
+filled in. Account passwords and the DKIM key are generated on first
+install and preserved on upgrade. See the
+[chart README](mailserver/README.md), including the
+[port table](mailserver/README.md#ports) for firewall owners.
+
+> Publish 25 (server-to-server SMTP), 465 and 587 (client submission)
+> and 993 (IMAPS), allow outbound 25 (many clouds block it), and keep
+> ICMPv6 open. Gmail and Microsoft reject IPv6 senders without a
+> matching PTR record.
+
 ## Repository layout
 
 ```
@@ -171,6 +195,7 @@ falco/                   # chart source (wraps an upstream dependency)
 adguard-home/            # chart source
 vaanarsena/              # chart source
 vishwakarma/             # chart source
+mailserver/              # chart source
 */  *.tgz                # packaged releases, alongside each chart
 artifacthub-repo.yml     # Artifact Hub ownership metadata
 ```
@@ -178,7 +203,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma
+CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma, mailserver
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \

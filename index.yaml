@@ -85,6 +85,64 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/falco/falco-0.1.0.tgz
     version: 0.1.0
+  mailserver:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Roundcube webmail, on by default, with its own certificate and per-client login rate limiting.
+        - kind: added
+          description: Initial release. One required value (domain); hostname, accounts, aliases, DKIM, TLS and DNS hints are all derived from it.
+        - kind: added
+          description: IPv6 first - Service ipFamilyPolicy/ipFamilies, optional host networking, and Postfix outbound address preference and source binding.
+        - kind: added
+          description: Rspamd (spam, DKIM signing, SPF, DMARC, ARC), Fail2ban, postscreen and outbound MTA-STS on by default; ClamAV and an inbound MTA-STS policy host optional.
+        - kind: added
+          description: Account passwords and the DKIM key generated on first install and preserved on upgrade. The init container prints every DNS record you need.
+      artifacthub.io/images: |
+        - name: docker-mailserver
+          image: ghcr.io/docker-mailserver/docker-mailserver:16.0.1
+        - name: roundcube
+          image: roundcube/roundcubemail:1.7.4-apache-nonroot
+        - name: nginx-unprivileged
+          image: nginxinc/nginx-unprivileged:1.30.6-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: docker-mailserver source (MIT)
+          url: https://github.com/docker-mailserver/docker-mailserver
+    apiVersion: v2
+    appVersion: 16.0.1
+    created: "2026-10-17T23:08:24.6186542+05:30"
+    description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack
+      clusters - Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM,
+      MTA-STS and every domain-specific setting in values.
+    digest: 7b3a4880b76fcfe15f1edef6bb2a709dd9fd6dec0483cc4aa663be88df2cc6d3
+    home: https://docker-mailserver.github.io/docker-mailserver/latest/
+    icon: https://raw.githubusercontent.com/docker-mailserver/docker-mailserver/master/docs/content/assets/logo/dmo-logo.min.svg
+    keywords:
+    - mail
+    - smtp
+    - imap
+    - postfix
+    - dovecot
+    - rspamd
+    - clamav
+    - fail2ban
+    - dkim
+    - mta-sts
+    - ipv6
+    - webmail
+    - roundcube
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: mailserver
+    sources:
+    - https://github.com/docker-mailserver/docker-mailserver
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/mailserver/mailserver-0.1.0.tgz
+    version: 0.1.0
   netbird:
   - annotations:
       artifacthub.io/changes: |
@@ -1346,4 +1404,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-17T08:59:10.945629466Z"
+generated: "2026-10-17T23:08:24.6169941+05:30"

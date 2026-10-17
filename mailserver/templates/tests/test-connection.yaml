@@ -1,0 +1,101 @@
+{{- if .Values.tests.enabled }}
+{{- $svc := include "mailserver.fullname" . -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $svc }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    # The mail server's own image: already on the node, and it carries
+    # openssl and nc.
+    - name: probe
+      image: {{ include "mailserver.image" . }}
+      command:
+        - bash
+        - -c
+        - |
+          set -u
+          SVC={{ $svc }}
+          HOST={{ include "mailserver.hostname" . }}
+          fail() { echo "    FAILED: $*"; exit 1; }
+
+          # postscreen holds the greeting for up to 6s and drops clients that
+          # speak before it ends, so the first line waits 8s and
+          # every later line waits its turn.
+          smtp() {
+            { sleep 8; for line in "$@"; do printf '%s\r\n' "$line"; sleep 1; done; } \
+              | nc -w 10 "$SVC" 25
+          }
+
+          echo "==> SMTP greets as $HOST"
+          banner=$(smtp "QUIT" | grep -m1 "^220 ")
+          case "$banner" in
+            "220 $HOST"*) echo "    ok ($banner)" ;;
+            *) fail "got '$banner'" ;;
+          esac
+
+          echo "==> SMTP offers STARTTLS on 25"
+          echo | openssl s_client -connect "$SVC:25" -starttls smtp -servername "$HOST" -brief >/dev/null 2>&1 \
+            && echo "    ok" || fail "no TLS on 25"
+
+          {{- if .Values.ports.submission }}
+
+          echo "==> submission (587) offers STARTTLS"
+          echo | openssl s_client -connect "$SVC:587" -starttls smtp -servername "$HOST" -brief >/dev/null 2>&1 \
+            && echo "    ok" || fail "no TLS on 587"
+          {{- end }}
+          {{- if .Values.ports.submissions }}
+
+          echo "==> submissions (465) speaks implicit TLS"
+          echo | openssl s_client -connect "$SVC:465" -servername "$HOST" -brief >/dev/null 2>&1 \
+            && echo "    ok" || fail "no TLS on 465"
+          {{- end }}
+          {{- if .Values.ports.imaps }}
+
+          echo "==> IMAPS (993) speaks implicit TLS"
+          echo | openssl s_client -connect "$SVC:993" -servername "$HOST" -brief >/dev/null 2>&1 \
+            && echo "    ok" || fail "no TLS on 993"
+          {{- end }}
+          {{- if .Values.ports.pop3s }}
+
+          echo "==> POP3S (995) speaks implicit TLS and greets"
+          greet=$(printf 'QUIT\r\n' | timeout 15 openssl s_client -connect "$SVC:995" -servername "$HOST" -quiet 2>/dev/null | head -1)
+          case "$greet" in
+            "+OK"*) echo "    ok ($greet)" ;;
+            *) fail "got '$greet'" ;;
+          esac
+          {{- end }}
+
+          {{- if .Values.webmail.enabled }}
+          echo "==> webmail serves the Roundcube login page"
+          page=$(curl -s -m 10 -H "Host: {{ include "mailserver.webmailHost" . }}"             "http://{{ printf "%s-webmail" $svc | trunc 63 | trimSuffix "-" }}/")
+          echo "$page" | grep -qi "roundcube" && echo "    ok" || fail "no login page"
+
+          {{- end }}
+          echo "==> not an open relay"
+          # An unauthenticated client must not get a recipient on a
+          # domain the server does not host accepted. 250 2.1.5 is
+          # Postfix accepting a recipient; any 4xx/5xx refusal passes.
+          out=$(smtp "EHLO probe.invalid" "MAIL FROM:<probe@probe.invalid>" "RCPT TO:<probe@relay-test.invalid>" "QUIT")
+          if echo "$out" | grep -q '^250 2\.1\.5'; then
+            fail "relay accepted: $(echo "$out" | grep '^250 2\.1\.5')"
+          elif refusal=$(echo "$out" | grep -m1 -E '^[45][0-9]{2} '); then
+            echo "    ok ($refusal)"
+          else
+            fail "no reply to RCPT: $out"
+          fi
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
+{{- end }}

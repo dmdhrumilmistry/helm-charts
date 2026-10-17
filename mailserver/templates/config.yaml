@@ -1,0 +1,193 @@
+{{- include "mailserver.validate" . -}}
+{{- $domain := include "mailserver.domain" . -}}
+{{- $host := include "mailserver.hostname" . -}}
+{{- $fullName := include "mailserver.fullname" . -}}
+{{- $gen := dict -}}
+{{- if not .Values.existingAccountsSecret -}}
+{{- include "mailserver.generatedSecrets" . -}}
+{{- $gen = .Values._msGenerated -}}
+{{- end -}}
+{{/*
+Everything docker-mailserver reads from /tmp/docker-mailserver, rendered
+from values. The init container copies these into an emptyDir rather
+than mounting them in place: docker-mailserver chowns and rewrites parts
+of that directory at startup, which a read-only ConfigMap mount refuses.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+data:
+  {{- if not .Values.existingAccountsSecret }}
+  # Addresses and the Secret key holding each password. Not secret.
+  accounts.list: |
+    {{- range $gen.accounts }}
+    {{ .address }} {{ .key }}
+    {{- end }}
+  {{- end }}
+
+  postfix-virtual.cf: |
+    {{- /*
+    postmaster@ must always deliver (RFC 5321), and the default aliases
+    point at it. If no account owns it, hand it to the first account.
+    Postfix resolves aliases recursively, so abuse@ -> postmaster@ ->
+    that account still works.
+    */}}
+    {{- if not .Values.existingAccountsSecret }}
+    {{- $pm := printf "postmaster@%s" $domain }}
+    {{- $owned := false }}
+    {{- range $gen.accounts }}{{ if eq .address $pm }}{{ $owned = true }}{{ end }}{{ end }}
+    {{- range .Values.aliases }}{{ if eq (include "mailserver.address" (dict "name" .from "root" $)) $pm }}{{ $owned = true }}{{ end }}{{ end }}
+    {{- if not $owned }}
+    {{ $pm }} {{ (first $gen.accounts).address }}
+    {{- end }}
+    {{- end }}
+    {{- range .Values.aliases }}
+    {{ include "mailserver.address" (dict "name" (required "every alias needs from" .from) "root" $) }} {{ include "mailserver.address" (dict "name" (required "every alias needs to" .to) "root" $) }}
+    {{- end }}
+
+  postfix-main.cf: |
+    smtp_address_preference = {{ .Values.network.outboundAddressPreference }}
+    {{- with .Values.network.smtpBindAddress6 }}
+    smtp_bind_address6 = {{ . }}
+    {{- end }}
+    {{- with .Values.network.smtpBindAddress }}
+    smtp_bind_address = {{ . }}
+    {{- end }}
+    {{- with .Values.postfix.extraMainCf }}
+    {{- . | nindent 4 }}
+    {{- end }}
+
+  {{- if .Values.security.fail2ban.enabled }}
+  fail2ban-jail.cf: |
+    [DEFAULT]
+    ignoreip = {{ include "mailserver.fail2banIgnore" . }}
+  {{- end }}
+
+  {{- with .Values.dovecot.extraConfig }}
+  dovecot.cf: |
+    {{- . | nindent 4 }}
+  {{- end }}
+
+  {{- if .Values.security.rspamd.enabled }}
+  rspamd-dkim_signing.conf: |
+    # https://rspamd.com/doc/modules/dkim_signing.html
+    enabled = true;
+    sign_authenticated = true;
+    sign_local = false;
+    try_fallback = false;
+    use_domain = "header";
+    use_redis = false;
+    use_esld = true;
+    allow_username_mismatch = true;
+    check_pubkey = {{ .Values.dkim.checkPubkey }};
+    domain {
+      {{ $domain }} {
+        path = "/tmp/docker-mailserver/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key";
+        selector = "{{ .Values.dkim.selector }}";
+      }
+    }
+  {{- if .Values.security.rspamd.arc }}
+  # https://rspamd.com/doc/modules/arc.html
+  # Same key and selector as DKIM, so no extra DNS record.
+  rspamd-arc.conf: |
+    sign_local = true;
+    sign_authenticated = true;
+    use_domain = "header";
+    use_esld = true;
+    allow_username_mismatch = true;
+    domain {
+      {{ $domain }} {
+        path = "/tmp/docker-mailserver/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key";
+        selector = "{{ .Values.dkim.selector }}";
+      }
+    }
+  {{- end }}
+  # https://rspamd.com/doc/modules/milter_headers.html
+  # Diagnostic headers on inbound mail only: on mail your users send they
+  # would tell every recipient about the server's internals.
+  rspamd-milter_headers.conf: |
+    extended_spam_headers = true;
+    skip_local = true;
+    skip_authenticated = true;
+    {{- if .Values.security.rspamd.authenticationResults }}
+    use = ["authentication-results"];
+    authentication_results {
+      # Do not name the logged-in user in the header.
+      add_smtp_user = false;
+    }
+    {{- end }}
+  {{- if .Values.network.hostNetwork }}
+  # On the node's network the controller would listen on every host
+  # address, public ones included, and the NetworkPolicy no longer
+  # applies. Keep it on loopback; kubectl port-forward still reaches it.
+  rspamd-worker-controller.inc: |
+    bind_socket = "127.0.0.1:11334";
+  {{- end }}
+  {{- range $file, $content := .Values.security.rspamd.overrides }}
+  rspamd-{{ $file }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}
+  {{- end }}
+
+  dns-records.txt: |
+    {{- include "mailserver.dnsRecords" . | nindent 4 }}
+
+  init.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    CFG=/tmp/docker-mailserver
+    mkdir -p "$CFG/rspamd/override.d" "$CFG/rspamd/dkim"
+
+    for f in postfix-main.cf postfix-virtual.cf dovecot.cf fail2ban-jail.cf; do
+      if [ -f "/chart/config/$f" ]; then cp "/chart/config/$f" "$CFG/$f"; fi
+    done
+    for f in /chart/config/rspamd-*; do
+      [ -e "$f" ] || continue
+      cp "$f" "$CFG/rspamd/override.d/$(basename "$f" | sed 's/^rspamd-//')"
+    done
+
+    {{- if .Values.security.rspamd.enabled }}
+
+    # Owned by Rspamd from the start: docker-mailserver checks the key's
+    # ownership before it gets round to fixing it, and warns otherwise.
+    # Mode first, owner last: once the file is Rspamd's, root without
+    # CAP_FOWNER can no longer chmod it.
+    install -m 0600 /chart/dkim/{{ include "mailserver.dkimSecretKey" . }} \
+      "$CFG/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key"
+    chown _rspamd:_rspamd "$CFG/rspamd/dkim/{{ $domain }}.{{ .Values.dkim.selector }}.key"
+    {{- end }}
+
+    {{- if .Values.existingAccountsSecret }}
+
+    install -m 0600 /chart/accounts/postfix-accounts.cf "$CFG/postfix-accounts.cf"
+    {{- else }}
+
+    # SHA512-CRYPT, the scheme docker-mailserver's own `setup email add`
+    # writes. Hashed here rather than in the chart because Helm has no
+    # crypt(3), and read from stdin so no password lands in argv.
+    umask 077
+    : > "$CFG/postfix-accounts.cf"
+    while read -r addr key; do
+      [ -n "$addr" ] || continue
+      hash=$(openssl passwd -6 -stdin < "/chart/accounts/$key")
+      printf '%s|{SHA512-CRYPT}%s\n' "$addr" "$hash" >> "$CFG/postfix-accounts.cf"
+    done < /chart/config/accounts.list
+    umask 022
+    {{- end }}
+
+    echo "config written to $CFG"
+    {{- if .Values.security.rspamd.enabled }}
+
+    # From the Secret's copy: the installed one now belongs to Rspamd.
+    pub=$(openssl pkey -in /chart/dkim/{{ include "mailserver.dkimSecretKey" . }} -pubout -outform DER | base64 -w0)
+    echo
+    sed "s|__DKIM_PUBLIC_KEY__|$pub|" /chart/config/dns-records.txt
+    {{- else }}
+    echo
+    cat /chart/config/dns-records.txt
+    {{- end }}

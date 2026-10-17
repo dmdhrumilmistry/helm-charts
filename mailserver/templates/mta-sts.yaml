@@ -1,0 +1,149 @@
+{{- if .Values.mtaSts.enabled }}
+{{- $fullName := printf "%s-mta-sts" (include "mailserver.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- $host := printf "mta-sts.%s" (include "mailserver.domain" .) -}}
+{{- $ing := .Values.mtaSts.ingress -}}
+{{/*
+RFC 8461 policy host. Senders fetch the policy over HTTPS from the fixed
+name mta-sts.<domain>; the _mta-sts TXT record (printed in the install
+notes) tells them when it changed.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta-sts
+data:
+  mta-sts.txt: |
+    {{- include "mailserver.mtaStsPolicy" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta-sts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mailserver.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mta-sts
+  template:
+    metadata:
+      labels:
+        {{- include "mailserver.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mta-sts
+      annotations:
+        checksum/policy: {{ include "mailserver.mtaStsPolicy" . | sha256sum }}
+    spec:
+      {{- include "mailserver.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: {{ include "mailserver.mtaStsImage" . }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /.well-known/mta-sts.txt
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /.well-known/mta-sts.txt
+              port: http
+            periodSeconds: 30
+          volumeMounts:
+            - name: policy
+              mountPath: /usr/share/nginx/html/.well-known
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- with .Values.mtaSts.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: policy
+          configMap:
+            name: {{ $fullName }}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta-sts
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "mailserver.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mta-sts
+---
+{{- $ann := deepCopy ($ing.annotations | default dict) -}}
+{{- if $ing.tls.clusterIssuer -}}
+{{- $_ := set $ann "cert-manager.io/cluster-issuer" $ing.tls.clusterIssuer -}}
+{{- end -}}
+{{- $tlsSecret := $ing.tls.secretName | default (printf "%s-tls" $fullName) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta-sts
+  {{- if $ann }}
+  annotations:
+    {{- toYaml $ann | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $ing.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  # MTA-STS is HTTPS-only by definition: senders ignore a policy served
+  # without a valid certificate for this exact name.
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $tlsSecret }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /.well-known/mta-sts.txt
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  name: http
+{{- end }}

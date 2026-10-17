@@ -1,0 +1,552 @@
+# =====================================================================
+# mailserver - docker-mailserver for IPv6 and dual-stack clusters
+#
+#   helm install mail dmdhrumilmistry/mailserver \
+#     --namespace mail --create-namespace \
+#     --set domain=example.com \
+#     --set tls.certManager.issuerRef.name=letsencrypt-dns
+#
+# One required value: domain. The mail hostname, the postmaster
+# address, the default accounts and aliases, the DKIM signing domain,
+# the TLS certificate and the DNS records printed for you are all
+# derived from it, so nothing here names a real domain.
+#
+# Bundles Postfix (SMTP), Dovecot (IMAP), Rspamd (spam filtering, DKIM
+# signing, SPF/DMARC/ARC checks), Fail2ban (brute force bans) and
+# postscreen (bot filtering), all open source. ClamAV (antivirus) is
+# available but off.
+#
+# LICENSING: this chart is MIT, and so is docker-mailserver.
+# =====================================================================
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+image:
+  registry: ghcr.io
+  repository: docker-mailserver/docker-mailserver
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+commonLabels: {}
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+# =====================================================================
+# Identity
+# =====================================================================
+
+# REQUIRED. The domain you receive mail for, e.g. example.com. No
+# default on purpose: set it at install time with --set or in a values
+# file you keep out of version control.
+domain: ""
+
+# The server's own name. It is what the MX record points at, what the
+# TLS certificate covers, what Postfix greets with, and what the PTR
+# (reverse DNS) record of your IPv6 address must resolve to.
+# Defaults to mail.<domain>.
+hostname: ""
+
+# Receives bounces and system reports. Defaults to postmaster@<domain>.
+postmasterAddress: ""
+
+# =====================================================================
+# Accounts
+#
+# A name without @ gets @<domain> appended. Leave password empty to
+# generate one; generated passwords are read back from the cluster on
+# upgrade, so re-running helm never changes them.
+#
+# Passwords live in plain form in the <release>-accounts Secret so you
+# can read them back, and are hashed (SHA512-CRYPT, via Dovecot's own
+# doveadm) by the init container on every start.
+#
+# The chart is declarative: this list is the source of truth. Accounts
+# added with `setup email add` inside the pod last until the next
+# restart.
+#
+# docker-mailserver refuses to start without at least one account.
+# =====================================================================
+accounts:
+  - name: postmaster
+    password: ""
+
+# Bring your own postfix-accounts.cf instead (key: postfix-accounts.cf,
+# lines of address|{SCHEME}hash). The accounts list above is then
+# ignored.
+existingAccountsSecret: ""
+
+# Extra addresses delivered to an account. A name without @ gets
+# @<domain> appended on both sides. abuse@ and postmaster@ are
+# required by RFC 2142; the report addresses receive the DMARC and
+# TLS-RPT reports that the printed DNS records ask for.
+aliases:
+  - from: abuse
+    to: postmaster
+  - from: dmarc-reports
+    to: postmaster
+  - from: tls-reports
+    to: postmaster
+
+# =====================================================================
+# Networking and IPv6
+#
+# Mail is unforgiving about addresses: receivers check that your
+# sending address has a PTR record matching the hostname, that SPF
+# lists it, and they reject IPv6 senders that fail either. Read the
+# "IPv6" section of the README before going live.
+# =====================================================================
+network:
+  # Which address families the mail Service gets. PreferDualStack with
+  # no ipFamilies gives you IPv6 wherever the cluster supports it, and
+  # still installs on IPv4-only clusters. For an IPv6-only Service:
+  #   ipFamilyPolicy: SingleStack
+  #   ipFamilies: [IPv6]
+  # For both, with IPv6 as primary:
+  #   ipFamilyPolicy: RequireDualStack
+  #   ipFamilies: [IPv6, IPv4]
+  ipFamilyPolicy: PreferDualStack
+  ipFamilies: []
+
+  # What Postfix and Dovecot listen on inside the pod: all | ipv4 | ipv6.
+  inetProtocols: all
+
+  # Which family Postfix tries first when delivering outbound mail:
+  # any | ipv6 | ipv4. It falls back to the other family either way.
+  # Set ipv4 if your IPv6 egress address has no PTR record yet, or
+  # receivers like Gmail will reject you over IPv6.
+  outboundAddressPreference: any
+
+  # Source address Postfix sends from. Only useful with hostNetwork on
+  # a node that holds several IPv6 addresses (including temporary
+  # "privacy" addresses): pin it to the one your PTR and SPF records
+  # cover. Leave empty otherwise.
+  smtpBindAddress6: ""
+  smtpBindAddress: ""
+
+  # Bind the pod to the node's network stack. The simplest way to get a
+  # real IPv6 client address in and a predictable IPv6 source address
+  # out, at the cost of pinning mail to one node (use nodeSelector).
+  # With Fail2ban on, bans then land in the node's firewall.
+  hostNetwork: false
+  # Required with hostNetwork: the node's main interface (ip -br addr),
+  # e.g. ens33 or enp1s0. docker-mailserver reads its own address from
+  # it and assumes eth0 otherwise, which a host rarely has.
+  hostInterface: ""
+
+# =====================================================================
+# Ports
+#
+# Which mail ports the Service publishes. See the README's port table
+# for who needs each one and why. SMTP (25) is always on: without it
+# you cannot receive mail.
+# =====================================================================
+ports:
+  # 465, implicit TLS. What mail clients should use to send.
+  submissions: true
+  # 587, STARTTLS. For clients that cannot do implicit TLS.
+  submission: true
+  # 993, implicit TLS. What mail clients should use to read.
+  imaps: true
+  # 143, STARTTLS. Off: 993 covers every modern client.
+  imap: false
+  # 995, implicit TLS. Off: enable only if you have POP3 clients.
+  pop3s: false
+  # 4190. Lets clients manage server-side filter rules (Sieve).
+  managesieve: false
+
+service:
+  # LoadBalancer gives the server its own public address. With
+  # network.hostNetwork, set ClusterIP: the node's address is used.
+  type: LoadBalancer
+  annotations: {}
+  loadBalancerClass: ""
+  # Deprecated upstream but still honoured by MetalLB and some clouds.
+  loadBalancerIP: ""
+  # Addresses already routed to a node (for example a node's public
+  # IPv6) that kube-proxy should accept mail on.
+  externalIPs: []
+  # Local preserves the client's real address. Without it, every
+  # connection appears to come from a node: SPF checks fail, Fail2ban
+  # bans the node, and DNSBL lookups query the wrong address.
+  externalTrafficPolicy: Local
+
+# =====================================================================
+# TLS
+#
+# Required: Dovecot refuses password logins over unencrypted
+# connections, and receivers rate down mail delivered without TLS.
+# Give either a cert-manager issuer or an existing kubernetes.io/tls
+# Secret covering the hostname. Renewals are picked up without a
+# restart.
+#
+# The mail hostname usually points at a different address than your
+# HTTP ingress, so an HTTP-01 challenge for it fails. Use a DNS-01
+# issuer.
+# =====================================================================
+tls:
+  existingSecret: ""
+  certManager:
+    enabled: true
+    issuerRef:
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io
+    # RSA rather than ECDSA: some sending servers still cannot
+    # negotiate ECDSA, and they fall back to plaintext, not to failing.
+    privateKey:
+      algorithm: RSA
+      size: 2048
+    duration: ""
+    renewBefore: ""
+    # Extra names on the certificate, e.g. autoconfig hostnames.
+    extraDnsNames: []
+  # modern | intermediate. Both require TLS 1.2 or later with forward
+  # secrecy; intermediate adds CBC ciphers for older clients.
+  level: modern
+
+# =====================================================================
+# Security
+# =====================================================================
+security:
+  # Rspamd: spam scoring, DKIM signing and verification, SPF, DMARC and
+  # ARC. Replaces the older OpenDKIM/OpenDMARC/SpamAssassin/Amavis
+  # stack, which the chart turns off.
+  rspamd:
+    enabled: true
+    # Delays first-time senders. Effective against spam, but a
+    # legitimate first message can arrive minutes late.
+    greylisting: false
+    # Train the Bayes classifier when users move mail in and out of
+    # Junk.
+    learn: true
+    # Run outbound mail from your own users through the spam filter
+    # too, catching a compromised account before receivers do.
+    checkAuthenticated: false
+    # Seal mail that passes through (forwards, mailing lists) with an
+    # ARC signature, so the next hop can trust the SPF/DKIM results
+    # seen here even after forwarding breaks SPF. Uses the DKIM key and
+    # selector; no extra DNS record.
+    arc: true
+    # Stamp inbound mail with an Authentication-Results header (SPF,
+    # DKIM, DMARC, ARC verdicts) for clients and filters to read.
+    authenticationResults: true
+    # Extra Rspamd override.d files, by filename. Applied after the
+    # chart's own.
+    overrides: {}
+      # actions.conf: |
+      #   reject = 15;
+
+  # Antivirus. Off: it only catches already-known malware, which the
+  # large senders scan for before mail leaves them, and it needs about
+  # 1.5 GiB of memory on its own. If you turn it on, raise
+  # resources.limits.memory to 3Gi.
+  clamav:
+    enabled: false
+
+  # Bans addresses that fail logins repeatedly. Needs NET_ADMIN and
+  # NET_RAW, and only works when the real client address reaches the
+  # pod (service.externalTrafficPolicy: Local, or hostNetwork).
+  fail2ban:
+    enabled: true
+    # drop | reject
+    blockType: drop
+    # Addresses never banned, on top of loopback (and
+    # webmail.clusterNetworks while the webmail is on).
+    ignoreNetworks: []
+
+  # postscreen screens SMTP clients before Postfix talks to them,
+  # dropping bots that talk out of turn: enforce | drop | ignore.
+  postscreenAction: enforce
+
+  # Have postscreen check public DNS blocklists (Spamhaus and others).
+  # Off by default: the free tiers refuse queries that arrive via large
+  # public resolvers, which is where most cluster DNS ends up. Turn on
+  # with dnsConfig pointing at your own recursive resolver.
+  dnsbl: false
+
+  # Refuse mail from authenticated users whose From address is not
+  # their own.
+  spoofProtection: true
+
+  # Check the recipient's MTA-STS policy on outbound mail and refuse to
+  # deliver over a downgraded connection.
+  outboundMtaSts: true
+
+# =====================================================================
+# DKIM
+#
+# A 4096-bit RSA key generated on first install and preserved on
+# upgrade. The init container prints the DNS record for it:
+#
+#   kubectl logs -n <ns> <release>-0 -c init-config
+#
+# 4096-bit public keys exceed 255 characters, so the TXT value must be
+# split into quoted strings. Most DNS providers do this for you. To use
+# a 2048-bit key instead, create it yourself and set existingSecret.
+# =====================================================================
+dkim:
+  selector: mail
+  existingSecret: ""
+  existingSecretKey: private.key
+  # Rspamd checks the published key matches before signing, so mail
+  # goes out unsigned rather than wrongly signed until the record is
+  # live.
+  checkPubkey: true
+
+# =====================================================================
+# DNS
+#
+# The record values below feed both the sheet the init container prints
+# and, with publish.enabled, the records a CronJob keeps in your DNS
+# zone. The CronJob re-checks every few minutes, so the address records
+# follow a changing IPv6 prefix.
+#
+# It only touches what it owns: the A/AAAA records of the mail (and
+# webmail) hostname, the TXT records that start with v=spf1, v=DKIM1,
+# v=DMARC1, v=TLSRPTv1 and v=STSv1 at their names, and an MX pointing at
+# the hostname. Other records in the zone, including other MX and TXT
+# records, are left alone. PTR (reverse DNS) is not in your zone and
+# cannot be set from here.
+# =====================================================================
+dns:
+  spf:
+    # Appended before -all, e.g. include:relay.example for a relay.
+    extraMechanisms: []
+    # -all (reject) | ~all (soft fail)
+    all: "-all"
+  dmarc:
+    # What receivers do with mail failing DMARC: none (report only) |
+    # quarantine | reject. Start with none, read the reports, tighten.
+    policy: none
+    # For subdomains; empty follows policy.
+    subdomainPolicy: ""
+    # relaxed | strict. Strict requires the exact domain in SPF and DKIM.
+    alignment: relaxed
+    percent: 100
+    # Aggregate report address. Defaults to dmarc-reports@<domain>.
+    reportTo: ""
+  # TLS failure report address. Defaults to tls-reports@<domain>.
+  tlsrptReportTo: ""
+  mxPriority: 10
+
+  publish:
+    enabled: false
+    # cloudflare is the only provider so far.
+    provider: cloudflare
+    cloudflare:
+      # Secret holding an API token with Zone:DNS:Edit and Zone:Zone:Read
+      # on the zone.
+      apiTokenSecret: ""
+      apiTokenSecretKey: api-token
+      # Defaults to domain.
+      zone: ""
+    schedule: "*/5 * * * *"
+    ttl: 300
+    # Log the changes without making them.
+    dryRun: false
+    # Addresses published for the mail hostname. Empty means detect:
+    # the node interface's global addresses with network.hostNetwork,
+    # otherwise the Service's load balancer and external IPs. Private,
+    # loopback and ULA addresses are never published.
+    addresses:
+      ipv6: []
+      ipv4: []
+      # Publish A records too. Off by default: this chart is IPv6 first,
+      # and an IPv4 A record without a matching PTR hurts delivery.
+      publishIPv4: false
+    # Also publish the webmail hostname's address records. Uses the mail
+    # addresses unless webmailAddresses is set: right when the ingress
+    # controller answers on the same address (single node), wrong
+    # otherwise.
+    webmail: true
+    webmailAddresses:
+      ipv6: []
+      ipv4: []
+    image:
+      # The mail server's own image (it carries curl, openssl and a JSON
+      # processor), so nothing extra is pulled.
+      registry: ""
+      repository: ""
+      tag: ""
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+# =====================================================================
+# Inbound MTA-STS
+#
+# Publishes https://mta-sts.<domain>/.well-known/mta-sts.txt, telling
+# senders to only deliver to you over verified TLS. Needs an HTTP
+# ingress controller with a public TLS certificate for the
+# mta-sts.<domain> name (the name is fixed by RFC 8461).
+#
+# Start in testing mode and read the TLS-RPT reports before switching
+# to enforce: an enforce policy with a broken certificate makes senders
+# hold your mail.
+# =====================================================================
+mtaSts:
+  enabled: false
+  # testing | enforce | none
+  mode: testing
+  # Seconds senders cache the policy. One week is the usual value.
+  maxAge: 604800
+  # MX hosts the policy allows. Defaults to the hostname.
+  mx: []
+  image:
+    registry: ""
+    repository: nginxinc/nginx-unprivileged
+    tag: "1.30.6-alpine"
+  ingress:
+    className: ""
+    annotations: {}
+    tls:
+      clusterIssuer: ""
+      secretName: ""
+  resources:
+    requests:
+      cpu: 5m
+      memory: 16Mi
+    limits:
+      memory: 64Mi
+
+# =====================================================================
+# Webmail (Roundcube)
+#
+# A browser inbox at https://webmail.<domain>, behind your HTTP ingress
+# controller. It logs in to the mail server over IMAPS (993) and SMTPS
+# (465) inside the cluster, verifying the mail certificate, so both
+# ports must stay enabled.
+#
+# Brute force: every webmail login reaches the mail server from the
+# Roundcube pod, so Fail2ban is told to ignore clusterNetworks (or it
+# would ban the webmail for everyone). Roundcube instead rate-limits
+# failed logins per real client address, which it reads from the
+# ingress controller's X-Forwarded-For.
+# =====================================================================
+webmail:
+  enabled: true
+  # Defaults to webmail.<domain>.
+  host: ""
+  image:
+    registry: ""
+    repository: roundcube/roundcubemail
+    tag: "1.7.4-apache-nonroot"
+  # Where the ingress controller and Roundcube pods live. Trusted for
+  # X-Forwarded-For and never banned by Fail2ban. The default covers
+  # every private range; narrow it to your pod CIDR (k3s: 10.42.0.0/16).
+  clusterNetworks:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - fc00::/7
+  # Failed logins allowed per client address per minute.
+  loginRateLimit: 3
+  # Bundled Roundcube plugins. managesieve is added automatically when
+  # ports.managesieve is on.
+  plugins:
+    - archive
+    - zipdownload
+  # Largest attachment users can upload. Keep it under
+  # postfix.messageSizeLimit, which counts the encoded size.
+  uploadMaxSize: 18M
+  # Appended to Roundcube's config, as PHP.
+  extraConfig: ""
+    # $config['product_name'] = 'Mail';
+  ingress:
+    className: ""
+    annotations: {}
+    tls:
+      # Defaults to a cert-manager certificate from
+      # tls.certManager.issuerRef. Required when that is not in use.
+      secretName: ""
+  # Contacts, settings and identities (SQLite). Mail itself stays on the
+  # mail server.
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# =====================================================================
+# Overrides
+# =====================================================================
+postfix:
+  # Appended to postfix-main.cf (key = value lines, applied with
+  # postconf).
+  extraMainCf: ""
+  # Largest message accepted, in bytes. 0 means unlimited.
+  messageSizeLimit: 26214400
+
+dovecot:
+  # Written to dovecot.cf. Dovecot 2.4 syntax: docker-mailserver 16
+  # moved to it, and 2.3 settings may not load.
+  extraConfig: ""
+
+# Any other docker-mailserver environment variable. Takes precedence
+# over the chart's own.
+# https://docker-mailserver.github.io/docker-mailserver/latest/config/environment/
+extraEnv: {}
+  # LOG_LEVEL: debug
+
+timezone: UTC
+logLevel: info
+
+# =====================================================================
+# Persistence
+#
+# One volume, split into mailboxes (/var/mail), service state such as
+# the queue, Rspamd's Bayes data and, if enabled, ClamAV signatures
+# (/var/mail-state), and logs (/var/log/mail). Configuration is not on
+# it: that is rebuilt from values on every start.
+# =====================================================================
+persistence:
+  enabled: true
+  size: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  existingClaim: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+# Restrict which ports reach the pod. Rspamd's web controller (11334)
+# listens on every interface inside the pod; this keeps it private.
+# Egress stays open: mail delivery needs outbound 25 to anywhere.
+networkPolicy:
+  enabled: true
+
+# Point Rspamd and postscreen at a resolver that blocklists accept.
+dnsPolicy: ""
+dnsConfig: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+tests:
+  enabled: true
