@@ -51,6 +51,12 @@ docker-mailserver {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}" in 
 {{- end }}
 {{- end }}
 
+{{- if .Values.webmail.enabled }}
+
+   Webmail: https://{{ include "mailserver.webmailHost" . }}
+   (log in with the bare name, e.g. postmaster, or the full address)
+{{- end }}
+
    Mail clients log in with the full address and:
      IMAP  {{ $host }}:993 (SSL/TLS)
      SMTP  {{ $host }}:465 (SSL/TLS){{ if .Values.ports.submission }} or :587 (STARTTLS){{ end }}

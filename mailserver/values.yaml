@@ -246,6 +246,9 @@ security:
     enabled: true
     # drop | reject
     blockType: drop
+    # Addresses never banned, on top of loopback (and
+    # webmail.clusterNetworks while the webmail is on).
+    ignoreNetworks: []
 
   # postscreen screens SMTP clients before Postfix talks to them,
   # dropping bots that talk out of turn: enforce | drop | ignore.
@@ -322,6 +325,69 @@ mtaSts:
       memory: 16Mi
     limits:
       memory: 64Mi
+
+# =====================================================================
+# Webmail (Roundcube)
+#
+# A browser inbox at https://webmail.<domain>, behind your HTTP ingress
+# controller. It logs in to the mail server over IMAPS (993) and SMTPS
+# (465) inside the cluster, verifying the mail certificate, so both
+# ports must stay enabled.
+#
+# Brute force: every webmail login reaches the mail server from the
+# Roundcube pod, so Fail2ban is told to ignore clusterNetworks (or it
+# would ban the webmail for everyone). Roundcube instead rate-limits
+# failed logins per real client address, which it reads from the
+# ingress controller's X-Forwarded-For.
+# =====================================================================
+webmail:
+  enabled: true
+  # Defaults to webmail.<domain>.
+  host: ""
+  image:
+    registry: ""
+    repository: roundcube/roundcubemail
+    tag: "1.7.4-apache-nonroot"
+  # Where the ingress controller and Roundcube pods live. Trusted for
+  # X-Forwarded-For and never banned by Fail2ban. The default covers
+  # every private range; narrow it to your pod CIDR (k3s: 10.42.0.0/16).
+  clusterNetworks:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - fc00::/7
+  # Failed logins allowed per client address per minute.
+  loginRateLimit: 3
+  # Bundled Roundcube plugins. managesieve is added automatically when
+  # ports.managesieve is on.
+  plugins:
+    - archive
+    - zipdownload
+  # Largest attachment users can upload. Keep it under
+  # postfix.messageSizeLimit, which counts the encoded size.
+  uploadMaxSize: 18M
+  # Appended to Roundcube's config, as PHP.
+  extraConfig: ""
+    # $config['product_name'] = 'Mail';
+  ingress:
+    className: ""
+    annotations: {}
+    tls:
+      # Defaults to a cert-manager certificate from
+      # tls.certManager.issuerRef. Required when that is not in use.
+      secretName: ""
+  # Contacts, settings and identities (SQLite). Mail itself stays on the
+  # mail server.
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
 
 # =====================================================================
 # Overrides

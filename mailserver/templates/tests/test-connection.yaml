@@ -65,6 +65,12 @@ spec:
             && echo "    ok" || fail "no TLS on 993"
           {{- end }}
 
+          {{- if .Values.webmail.enabled }}
+          echo "==> webmail serves the Roundcube login page"
+          page=$(curl -s -m 10 -H "Host: {{ include "mailserver.webmailHost" . }}"             "http://{{ printf "%s-webmail" $svc | trunc 63 | trimSuffix "-" }}/")
+          echo "$page" | grep -qi "roundcube" && echo "    ok" || fail "no login page"
+
+          {{- end }}
           echo "==> not an open relay"
           # An unauthenticated client must not get a recipient on a
           # domain the server does not host accepted. 250 2.1.5 is

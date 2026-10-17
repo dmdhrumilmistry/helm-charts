@@ -18,6 +18,7 @@ place yours needs to live.
 - [Security tooling](#security-tooling)
 - [Accounts and aliases](#accounts-and-aliases)
 - [TLS](#tls)
+- [Webmail](#webmail)
 - [Values](#values)
 - [Operating it](#operating-it)
 
@@ -72,6 +73,7 @@ node to the internet.
 | 143 | TCP | Mail clients | Off (`ports.imap`) | IMAP over STARTTLS. Redundant with 993 for every modern client. |
 | 995 | TCP | Mail clients | Off (`ports.pop3s`) | POP3 over implicit TLS. Only if you have POP3 clients. |
 | 4190 | TCP | Mail clients | Off (`ports.managesieve`) | ManageSieve, for editing server-side filter rules from a client. |
+| 443 | TCP | Your users' browsers | On (`webmail.enabled`) | HTTPS for `webmail.<domain>`. Goes to your **HTTP ingress controller**, not the mail Service. |
 | 443 | TCP | Other mail servers | Only with `mtaSts.enabled` | HTTPS for `mta-sts.<domain>`, serving the MTA-STS policy. This goes to your **HTTP ingress controller**, not the mail Service. |
 | 80 / 443 | TCP | Let's Encrypt | Only with an HTTP-01 issuer | ACME challenges. Not needed with the recommended DNS-01 issuer. |
 
@@ -232,6 +234,7 @@ For `domain=example.com`:
 | `mail.example.com` | AAAA | the Service's IPv6 | Where the mail host is. Add an A record too for IPv4 senders. |
 | `example.com` | MX | `10 mail.example.com.` | Where mail for the domain goes. |
 | `example.com` | TXT | `v=spf1 mx -all` | Which addresses may send for the domain. Add `ip6:` for your egress address if it differs. |
+| `webmail.example.com` | AAAA / A | your HTTP ingress | With `webmail.enabled`: the browser inbox. |
 | `mail._domainkey.example.com` | TXT | `v=DKIM1; k=rsa; p=...` | Public key that verifies the DKIM signature on outbound mail. |
 | `_dmarc.example.com` | TXT | `v=DMARC1; p=none; rua=mailto:dmarc-reports@example.com` | What receivers do when SPF and DKIM fail, and where to send reports. Tighten to `quarantine`, then `reject`. |
 | `_smtp._tls.example.com` | TXT | `v=TLSRPTv1; rua=mailto:tls-reports@example.com` | Where senders report TLS failures delivering to you. |
@@ -315,6 +318,31 @@ cannot negotiate ECDSA, and they fall back to plaintext rather than
 failing. Renewals are picked up by DMS's change detector without a
 restart.
 
+## Webmail
+
+[Roundcube](https://roundcube.net) (GPL-3.0), on by default, at
+`https://webmail.<domain>` behind your HTTP ingress controller. Users
+log in with the bare name (`alice`) or the full address.
+
+- It reaches the mail server inside the cluster over IMAPS (993) and
+  SMTPS (465), verifying the mail certificate against the mail hostname,
+  so `ports.imaps` and `ports.submissions` must stay on.
+- Its TLS certificate comes from the same cert-manager issuer as the
+  mail certificate, unless you set `webmail.ingress.tls.secretName`.
+- Contacts and settings live in SQLite on a small volume, kept on
+  uninstall. Mail itself stays on the mail server.
+
+**Brute force.** Every webmail login reaches Dovecot from the Roundcube
+pod, so Fail2ban would ban the webmail for everyone after a few wrong
+passwords. The chart therefore tells Fail2ban to ignore
+`webmail.clusterNetworks`, and Roundcube rate-limits failed logins
+(`webmail.loginRateLimit` per minute) per real client address, read
+from the ingress controller's `X-Forwarded-For`. The default
+`clusterNetworks` covers every private range; narrow it to your pod CIDR
+(`10.42.0.0/16` on k3s) so LAN clients stay subject to Fail2ban.
+
+Turn it off with `webmail.enabled=false`; nothing else depends on it.
+
 ## Values
 
 | Key | Default | Description |
@@ -342,6 +370,11 @@ restart.
 | `security.*` | see [Security tooling](#security-tooling) | |
 | `dkim.selector` | `mail` | DKIM selector. |
 | `dkim.existingSecret` | `""` | Bring your own DKIM private key. |
+| `webmail.enabled` | `true` | Roundcube webmail. |
+| `webmail.host` | `webmail.<domain>` | Webmail hostname. |
+| `webmail.clusterNetworks` | private ranges | Trusted proxies, never banned by Fail2ban. Narrow to your pod CIDR. |
+| `webmail.ingress.className` | `""` | Ingress class; empty uses the cluster default. |
+| `security.fail2ban.ignoreNetworks` | `[]` | Extra addresses Fail2ban never bans. |
 | `mtaSts.enabled` | `false` | Publish an inbound MTA-STS policy. |
 | `mtaSts.mode` | `testing` | `testing`, `enforce` or `none`. |
 | `postfix.extraMainCf` | `""` | Extra Postfix `main.cf` lines. |
@@ -369,7 +402,7 @@ restart.
 
 ## Licensing
 
-This chart is MIT. docker-mailserver is MIT; the components it bundles
+This chart is MIT. docker-mailserver is MIT, Roundcube is GPL-3.0; the components it bundles
 are open source under their own licences (Postfix: IPL/EPL, Dovecot:
 MIT/LGPL, Rspamd: Apache-2.0, ClamAV: GPL-2.0, Fail2ban: GPL-2.0). The
 chart contains none of their code and references the published image.

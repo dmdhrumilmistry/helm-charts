@@ -61,6 +61,12 @@ data:
     {{- . | nindent 4 }}
     {{- end }}
 
+  {{- if .Values.security.fail2ban.enabled }}
+  fail2ban-jail.cf: |
+    [DEFAULT]
+    ignoreip = {{ include "mailserver.fail2banIgnore" . }}
+  {{- end }}
+
   {{- with .Values.dovecot.extraConfig }}
   dovecot.cf: |
     {{- . | nindent 4 }}
@@ -107,7 +113,7 @@ data:
     CFG=/tmp/docker-mailserver
     mkdir -p "$CFG/rspamd/override.d" "$CFG/rspamd/dkim"
 
-    for f in postfix-main.cf postfix-virtual.cf dovecot.cf; do
+    for f in postfix-main.cf postfix-virtual.cf dovecot.cf fail2ban-jail.cf; do
       if [ -f "/chart/config/$f" ]; then cp "/chart/config/$f" "$CFG/$f"; fi
     done
     for f in /chart/config/rspamd-*; do

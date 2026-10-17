@@ -89,6 +89,8 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: Roundcube webmail, on by default, with its own certificate and per-client login rate limiting.
+        - kind: added
           description: Initial release. One required value (domain); hostname, accounts, aliases, DKIM, TLS and DNS hints are all derived from it.
         - kind: added
           description: IPv6 first - Service ipFamilyPolicy/ipFamilies, optional host networking, and Postfix outbound address preference and source binding.
@@ -99,6 +101,8 @@ entries:
       artifacthub.io/images: |
         - name: docker-mailserver
           image: ghcr.io/docker-mailserver/docker-mailserver:16.0.1
+        - name: roundcube
+          image: roundcube/roundcubemail:1.7.4-apache-nonroot
         - name: nginx-unprivileged
           image: nginxinc/nginx-unprivileged:1.30.6-alpine
       artifacthub.io/license: MIT
@@ -107,11 +111,11 @@ entries:
           url: https://github.com/docker-mailserver/docker-mailserver
     apiVersion: v2
     appVersion: 16.0.1
-    created: "2026-10-17T16:07:34.7365096+05:30"
+    created: "2026-10-17T21:21:35.957624+05:30"
     description: Self-hosted mail server (docker-mailserver) for IPv6 and dual-stack
-      clusters - Postfix, Dovecot, Rspamd and Fail2ban, with DKIM, MTA-STS and every
-      domain-specific setting in values.
-    digest: 79d716fe97048fce87113c02dc67c03b17b0d7c4144477ea867a2504013cccb3
+      clusters - Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM,
+      MTA-STS and every domain-specific setting in values.
+    digest: a54ae7497f64c7daf39854595c8a3439f2af397e1e5863e5ba7c3d541c678ec3
     home: https://docker-mailserver.github.io/docker-mailserver/latest/
     icon: https://raw.githubusercontent.com/docker-mailserver/docker-mailserver/master/docs/content/assets/logo/dmo-logo.min.svg
     keywords:
@@ -126,6 +130,8 @@ entries:
     - dkim
     - mta-sts
     - ipv6
+    - webmail
+    - roundcube
     maintainers:
     - name: Dhrumil Mistry
       url: https://github.com/dmdhrumilmistry
@@ -1398,4 +1404,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-17T16:07:34.7354766+05:30"
+generated: "2026-10-17T21:21:35.9555719+05:30"

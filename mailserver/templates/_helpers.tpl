@@ -65,6 +65,10 @@ default, so no real domain ever has to be written into the chart.
 {{- .Values.hostname | default (printf "mail.%s" (include "mailserver.domain" .)) | lower | trimSuffix "." -}}
 {{- end }}
 
+{{- define "mailserver.webmailHost" -}}
+{{- .Values.webmail.host | default (printf "webmail.%s" (include "mailserver.domain" .)) | lower | trimSuffix "." -}}
+{{- end }}
+
 {{- define "mailserver.postmaster" -}}
 {{- .Values.postmasterAddress | default (printf "postmaster@%s" (include "mailserver.domain" .)) -}}
 {{- end }}
@@ -115,6 +119,14 @@ work, rather than leaving a pod stuck in ContainerCreating.
 {{- end -}}
 {{- if and .Values.network.hostNetwork (not .Values.network.hostInterface) -}}
 {{- fail "network.hostInterface is required with network.hostNetwork: the node's main interface, e.g. ens33 (see ip -br addr)" -}}
+{{- end -}}
+{{- if .Values.webmail.enabled -}}
+{{- if not (and .Values.ports.imaps .Values.ports.submissions) -}}
+{{- fail "webmail needs ports.imaps and ports.submissions: it reaches the mail server through them" -}}
+{{- end -}}
+{{- if and (not .Values.webmail.ingress.tls.secretName) (or .Values.tls.existingSecret (not .Values.tls.certManager.enabled)) -}}
+{{- fail "webmail.ingress.tls.secretName is required when tls.certManager is not in use (or set webmail.enabled=false)" -}}
+{{- end -}}
 {{- end -}}
 {{- if not (has .Values.network.inetProtocols (list "all" "ipv4" "ipv6")) -}}
 {{- fail "network.inetProtocols must be all, ipv4 or ipv6" -}}
@@ -171,6 +183,14 @@ DNS caught up.
       {{- $_ := set $gen "dkim" (genPrivateKey "rsa") -}}
     {{- end -}}
   {{- end -}}
+  {{- if .Values.webmail.enabled -}}
+    {{- $existing := lookup "v1" "Secret" .Release.Namespace (printf "%s-webmail" $fullName) -}}
+    {{- if and $existing (index ($existing.data | default dict) "des-key") -}}
+      {{- $_ := set $gen "desKey" (index $existing.data "des-key" | b64dec) -}}
+    {{- else -}}
+      {{- $_ := set $gen "desKey" (randAlphaNum 24) -}}
+    {{- end -}}
+  {{- end -}}
   {{- $_ := set $.Values "_msGenerated" $gen -}}
 {{- end -}}
 {{- end }}
@@ -192,6 +212,21 @@ DNS caught up.
 {{- else -}}
 {{- printf "%s:%s" .Values.mtaSts.image.repository .Values.mtaSts.image.tag -}}
 {{- end -}}
+{{- end }}
+
+{{- define "mailserver.webmailImage" -}}
+{{- $registry := .Values.webmail.image.registry | default .Values.global.imageRegistry -}}
+{{- if $registry -}}
+{{- printf "%s/%s:%s" $registry .Values.webmail.image.repository .Values.webmail.image.tag -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.webmail.image.repository .Values.webmail.image.tag -}}
+{{- end -}}
+{{- end }}
+
+{{- define "mailserver.fail2banIgnore" -}}
+{{- $nets := concat (list "127.0.0.1/8" "::1") (.Values.security.fail2ban.ignoreNetworks | default list) -}}
+{{- if .Values.webmail.enabled -}}{{- $nets = concat $nets (.Values.webmail.clusterNetworks | default list) -}}{{- end -}}
+{{- uniq $nets | join " " -}}
 {{- end }}
 
 {{- define "mailserver.imagePullSecrets" -}}
@@ -250,6 +285,9 @@ only place the public half can be derived.
 {{- end }}
 _dmarc.{{ $domain }}.  TXT   "v=DMARC1; p=none; rua=mailto:dmarc-reports@{{ $domain }}"
 _smtp._tls.{{ $domain }}.  TXT   "v=TLSRPTv1; rua=mailto:tls-reports@{{ $domain }}"
+{{- if .Values.webmail.enabled }}
+{{ include "mailserver.webmailHost" . }}.  AAAA  <INGRESS-IPv6>   (your HTTP ingress, not the mail Service)
+{{- end }}
 {{- if .Values.mtaSts.enabled }}
 _mta-sts.{{ $domain }}.  TXT   "v=STSv1; id={{ include "mailserver.mtaStsId" . }}"
 mta-sts.{{ $domain }}.  AAAA  <INGRESS-IPv6>   (your HTTP ingress, not the mail Service)

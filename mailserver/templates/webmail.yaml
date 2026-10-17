@@ -1,0 +1,296 @@
+{{- if .Values.webmail.enabled }}
+{{- include "mailserver.validate" . -}}
+{{- include "mailserver.generatedSecrets" . -}}
+{{- $fullName := printf "%s-webmail" (include "mailserver.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- $mailSvc := printf "%s.%s.svc.cluster.local" (include "mailserver.fullname" .) .Release.Namespace -}}
+{{- $host := include "mailserver.webmailHost" . -}}
+{{- $wm := .Values.webmail -}}
+{{- $plugins := $wm.plugins | default list -}}
+{{- if .Values.ports.managesieve }}{{ $plugins = append $plugins "managesieve" }}{{ end -}}
+{{- $tlsSecret := $wm.ingress.tls.secretName | default (printf "%s-tls" $fullName) -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+type: Opaque
+stringData:
+  # Encrypts the IMAP password Roundcube keeps in each session. Preserved
+  # on upgrade so a rollout does not log everyone out.
+  des-key: {{ .Values._msGenerated.desKey | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+data:
+  chart.php: |
+    <?php
+    // Rendered by the mailserver chart.
+
+    // Roundcube reaches the mail server by its in-cluster Service name,
+    // so check the certificate against the name it was issued for.
+    $tls = ['ssl' => [
+        'verify_peer'      => true,
+        'verify_peer_name' => true,
+        'peer_name'        => '{{ include "mailserver.hostname" . }}',
+    ]];
+    $config['imap_conn_options'] = $tls;
+    $config['smtp_conn_options'] = $tls;
+
+    // Every login reaches Dovecot from this pod, so Fail2ban cannot
+    // tell users apart. Rate-limit here, per real client address,
+    // taken from the ingress controller's X-Forwarded-For.
+    $config['login_rate_limit'] = {{ int $wm.loginRateLimit }};
+    $config['proxy_whitelist'] = {{ $wm.clusterNetworks | toJson | replace "\"" "'" }};
+
+    // TLS terminates at the ingress.
+    $config['use_https'] = true;
+    $config['trusted_host_patterns'] = ['{{ $host }}'];
+    {{- with $wm.extraConfig }}
+
+    {{- . | nindent 4 }}
+    {{- end }}
+{{- if $wm.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+  annotations:
+    # Contacts and settings outlive an uninstall, like the DKIM key.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with $wm.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $wm.persistence.size | quote }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+spec:
+  replicas: 1
+  # SQLite on a ReadWriteOnce volume: one writer at a time.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mailserver.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: webmail
+  template:
+    metadata:
+      labels:
+        {{- include "mailserver.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: webmail
+      annotations:
+        checksum/config: {{ (printf "%s%s" (toJson $wm) .Values._msGenerated.desKey) | sha256sum }}
+    spec:
+      {{- include "mailserver.imagePullSecrets" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: roundcube
+          image: {{ include "mailserver.webmailImage" . }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ROUNDCUBEMAIL_DEFAULT_HOST
+              value: "ssl://{{ $mailSvc }}"
+            - name: ROUNDCUBEMAIL_DEFAULT_PORT
+              value: "993"
+            - name: ROUNDCUBEMAIL_SMTP_SERVER
+              value: "ssl://{{ $mailSvc }}"
+            - name: ROUNDCUBEMAIL_SMTP_PORT
+              value: "465"
+            # Users can log in with the bare local part.
+            - name: ROUNDCUBEMAIL_USERNAME_DOMAIN
+              value: {{ include "mailserver.domain" . | quote }}
+            - name: ROUNDCUBEMAIL_SKIN
+              value: elastic
+            - name: ROUNDCUBEMAIL_PLUGINS
+              value: {{ join "," $plugins | quote }}
+            - name: ROUNDCUBEMAIL_UPLOAD_MAX_FILESIZE
+              value: {{ $wm.uploadMaxSize | quote }}
+            - name: ROUNDCUBEMAIL_DES_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $fullName }}
+                  key: des-key
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ $host }}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ $host }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /var/roundcube/config
+              readOnly: true
+            - name: db
+              mountPath: /var/roundcube/db
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          {{- with $wm.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullName }}
+        - name: db
+          {{- if $wm.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullName }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "mailserver.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+{{- if and (not $wm.ingress.tls.secretName) .Values.tls.certManager.enabled (not .Values.tls.existingSecret) }}
+---
+{{- $cm := .Values.tls.certManager }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+spec:
+  secretName: {{ $tlsSecret }}
+  dnsNames:
+    - {{ $host | quote }}
+  privateKey:
+    rotationPolicy: Always
+  issuerRef:
+    name: {{ $cm.issuerRef.name }}
+    kind: {{ $cm.issuerRef.kind }}
+    group: {{ $cm.issuerRef.group }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+  {{- with $wm.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $wm.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: {{ $tlsSecret }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  name: http
+{{- if .Values.networkPolicy.enabled }}
+---
+# Only the web port; the ingress controller is the expected client.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mailserver.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webmail
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mailserver.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: webmail
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+{{- end }}
+{{- end }}
