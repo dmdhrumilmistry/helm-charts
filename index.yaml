@@ -228,6 +228,47 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: auth values for single sign-on (auth.oidc.*, client secret from an existing Secret) and for turning off password sign-in except for break-glass admins (auth.passwordLogin, auth.passwordLoginAllow), with a guard against locking everyone out.
+        - kind: changed
+          description: Deploys VaanarSena 0.6.0.
+      artifacthub.io/images: |
+        - name: vaanarsena
+          image: docker.io/dmdhrumilmistry/vaanarsena:0.6.0
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: VaanarSena source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/VaanarSena
+    apiVersion: v2
+    appVersion: 0.6.0
+    created: "2026-10-17T08:59:10.946426731Z"
+    description: Self-hosted VaanarSena - open source device management (MDM) for
+      iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD support.
+    digest: 5a5980a0bf9ca825791913e2eaf07a730d9d243e768ae07a9818fb5aae91d1cb
+    home: https://github.com/dmdhrumilmistry/VaanarSena
+    keywords:
+    - mdm
+    - device-management
+    - byod
+    - apple-mdm
+    - windows-mdm
+    - android-enterprise
+    - linux
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: vaanarsena
+    sources:
+    - https://github.com/dmdhrumilmistry/VaanarSena
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/vaanarsena/vaanarsena-0.7.0.tgz
+    version: 0.7.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: ingress.entryPoints (Traefik) to publish VaanarSena on extra entrypoints, for example IPv6 through a host TCP proxy when k3s is IPv4-only. Defaults to websecure, so nothing changes unless set.
       artifacthub.io/images: |
         - name: vaanarsena
@@ -1305,4 +1346,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-16T13:31:03.637578794Z"
+generated: "2026-10-17T08:59:10.945629466Z"

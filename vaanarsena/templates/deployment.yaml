@@ -120,6 +120,7 @@ spec:
             - name: VS_MANIFEST_PRUNE
               value: {{ .Values.manifests.prune | quote }}
             {{- end }}
+            {{- include "vs.authEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

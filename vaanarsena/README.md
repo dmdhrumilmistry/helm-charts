@@ -137,22 +137,32 @@ state in place. Format reference:
 
 ## Single sign-on and webhooks
 
-Single sign-on with your identity provider (Entra ID, Okta, Google, Keycloak
-and others) is set through `extraEnv`. Keep the client secret in a Secret:
+Single sign-on with your identity provider, and optionally no more password
+sign-in. Keep the client secret in a Secret. Google, for example:
+
+```bash
+kubectl -n vaanarsena create secret generic vaanarsena-oidc --from-literal=clientSecret=<client secret>
+```
 
 ```yaml
-extraEnv:
-  - {name: VS_OIDC_ISSUER, value: "https://login.microsoftonline.com/<tenant-id>/v2.0"}
-  - {name: VS_OIDC_CLIENT_ID, value: "<application-id>"}
-  - name: VS_OIDC_CLIENT_SECRET
-    valueFrom: {secretKeyRef: {name: vaanarsena-oidc, key: clientSecret}}
-  - {name: VS_OIDC_NAME, value: Microsoft}
-  - {name: VS_OIDC_ADMIN_GROUPS, value: "<mdm-admins-group-id>"}
+auth:
+  oidc:
+    issuer: https://accounts.google.com
+    clientId: <client id>.apps.googleusercontent.com
+    existingSecret: vaanarsena-oidc
+    name: Google
+    allowedDomains: [example.com]      # optional
+  # Password sign-in only for break-glass admins (keep one, with a strong password):
+  passwordLogin: false
+  passwordLoginAllow: [admin@example.com]
 ```
 
 Register `https://<publicHost>/api/v1/auth/oidc/callback` as the redirect URI.
-See [sso.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/sso.md).
-
+Google sends no groups, so create each person under Users with their role;
+providers that send groups can grant roles with `auth.oidc.adminGroups` and
+friends. See [sso.md](https://github.com/dmdhrumilmistry/VaanarSena/blob/main/docs/sso.md).
+The chart refuses to render `passwordLogin: false` with neither single sign-on
+nor an allowed account.
 Compliance webhooks (for conditional access) need no values: add them in the
 console under Settings > Webhooks. The pod must be able to reach the receivers;
 if you restrict egress, allow them. See
@@ -181,6 +191,8 @@ if you restrict egress, allow them. See
 | `ingress.clientCertificates` | `true` | Request and forward device client certificates (ingress-nginx). |
 | `ingress.httpRedirect` | `true` | Traefik: redirect plain HTTP on `publicHost` to HTTPS (otherwise `http://` gets a 404). |
 | `ingress.entryPoints` | `[websecure]` | Traefik only: entrypoints the HTTPS route is attached to. Add one to publish VaanarSena on it too (for example IPv6 through a host TCP proxy). |
+| `auth.passwordLogin` / `auth.passwordLoginAllow` | `true` / `[]` | Turn off console password sign-in except for the listed break-glass accounts. |
+| `auth.oidc.*` | | Single sign-on: `issuer`, `clientId`, `existingSecret` (key `clientSecretKey`), `name`, `scopes`, `groupsClaim`, `adminGroups`/`operatorGroups`/`auditorGroups`, `allowedDomains`, `trustUnverifiedEmail`. |
 | `postgresql.enabled` | `true` | Bundled PostgreSQL 17. |
 | `postgresql.persistence.size` | `10Gi` | Database volume. |
 | `externalDatabase.url` / `existingSecret` | `""` | Use your own PostgreSQL 14+. |

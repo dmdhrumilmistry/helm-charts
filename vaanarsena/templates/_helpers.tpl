@@ -185,3 +185,55 @@ imagePullSecrets:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Console sign-in settings (values: auth). Password sign-in is turned off only
+when auth.passwordLogin is explicitly false, so a partial auth block cannot
+disable it by accident.
+*/}}
+{{- define "vs.authEnv" -}}
+{{- $a := .Values.auth | default dict -}}
+{{- $o := $a.oidc | default dict -}}
+{{- $pwOff := eq (toString $a.passwordLogin) "false" -}}
+{{- if and $pwOff (not $o.issuer) (not $a.passwordLoginAllow) }}
+{{- fail "auth.passwordLogin=false needs auth.oidc.issuer or at least one auth.passwordLoginAllow account; otherwise nobody can sign in" }}
+{{- end }}
+{{- if $pwOff }}
+- name: VS_PASSWORD_LOGIN
+  value: "false"
+{{- end }}
+{{- with $a.passwordLoginAllow }}
+- name: VS_PASSWORD_LOGIN_ALLOW
+  value: {{ join "," . | quote }}
+{{- end }}
+{{- if $o.issuer }}
+{{- if not $o.clientId }}{{ fail "auth.oidc.clientId is required with auth.oidc.issuer" }}{{ end }}
+- name: VS_OIDC_ISSUER
+  value: {{ $o.issuer | quote }}
+- name: VS_OIDC_CLIENT_ID
+  value: {{ $o.clientId | quote }}
+{{- with $o.existingSecret }}
+- name: VS_OIDC_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ . }}
+      key: {{ $o.clientSecretKey | default "clientSecret" }}
+{{- end }}
+{{- range $k, $env := dict "name" "VS_OIDC_NAME" "scopes" "VS_OIDC_SCOPES" "groupsClaim" "VS_OIDC_GROUPS_CLAIM" }}
+{{- with index $o $k }}
+- name: {{ $env }}
+  value: {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- range $k, $env := dict "adminGroups" "VS_OIDC_ADMIN_GROUPS" "operatorGroups" "VS_OIDC_OPERATOR_GROUPS" "auditorGroups" "VS_OIDC_AUDITOR_GROUPS" "allowedDomains" "VS_OIDC_ALLOWED_DOMAINS" }}
+{{- with index $o $k }}
+- name: {{ $env }}
+  value: {{ join "," . | quote }}
+{{- end }}
+{{- end }}
+{{- if $o.trustUnverifiedEmail }}
+- name: VS_OIDC_TRUST_UNVERIFIED_EMAIL
+  value: "true"
+{{- end }}
+{{- end }}
+{{- end }}

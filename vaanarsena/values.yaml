@@ -52,6 +52,38 @@ ca:
 logLevel: info
 sessionTTL: 12h
 
+# Console sign-in. See docs/sso.md in the VaanarSena repository.
+auth:
+  # -- Allow console sign-in with a password for every user. false: only the
+  # accounts in passwordLoginAllow may (break-glass admins); needs oidc or at
+  # least one allowed account. API tokens are never affected.
+  passwordLogin: true
+  # -- Emails that may still sign in with a password when passwordLogin is false.
+  passwordLoginAllow: []
+  oidc:
+    # -- OpenID Connect issuer; setting it enables single sign-on
+    # (e.g. https://accounts.google.com).
+    issuer: ""
+    clientId: ""
+    # -- Secret holding the client secret under clientSecretKey. Empty for a
+    # public client.
+    existingSecret: ""
+    clientSecretKey: clientSecret
+    # -- Label on the sign-in button ("Sign in with <name>").
+    name: ""
+    # -- Space-separated scopes; default "openid email profile".
+    scopes: ""
+    # -- ID token claim listing the user's groups; default "groups".
+    groupsClaim: ""
+    # -- Groups granting each role. When any is set, roles come from groups and
+    # accounts are created at first sign-in; otherwise only existing users may
+    # sign in (e.g. Google, which sends no groups).
+    adminGroups: []
+    operatorGroups: []
+    auditorGroups: []
+    # -- Email domains allowed to use single sign-on.
+    allowedDomains: []
+    trustUnverifiedEmail: false
 # Apple MDM push certificate. Create a Secret with keys apns.crt and apns.key:
 #   kubectl create secret generic vaanarsena-apns --from-file=apns.crt --from-file=apns.key
 apple:
