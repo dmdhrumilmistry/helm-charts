@@ -4,10 +4,10 @@ description: Self-hosted VaanarSena - open source device management (MDM) for iO
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.6.1
+version: 0.7.0
 
 # Version of VaanarSena this chart deploys by default.
-appVersion: "0.5.0"
+appVersion: "0.6.0"
 
 home: https://github.com/dmdhrumilmistry/VaanarSena
 sources:
@@ -32,7 +32,7 @@ annotations:
   artifacthub.io/license: MIT
   artifacthub.io/images: |
     - name: vaanarsena
-      image: docker.io/dmdhrumilmistry/vaanarsena:0.5.0
+      image: docker.io/dmdhrumilmistry/vaanarsena:0.6.0
     - name: postgres
       image: postgres:17-alpine
   artifacthub.io/links: |
@@ -40,4 +40,6 @@ annotations:
       url: https://github.com/dmdhrumilmistry/VaanarSena
   artifacthub.io/changes: |
     - kind: added
-      description: ingress.entryPoints (Traefik) to publish VaanarSena on extra entrypoints, for example IPv6 through a host TCP proxy when k3s is IPv4-only. Defaults to websecure, so nothing changes unless set.
+      description: auth values for single sign-on (auth.oidc.*, client secret from an existing Secret) and for turning off password sign-in except for break-glass admins (auth.passwordLogin, auth.passwordLoginAllow), with a guard against locking everyone out.
+    - kind: changed
+      description: Deploys VaanarSena 0.6.0.
