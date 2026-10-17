@@ -64,6 +64,15 @@ spec:
           echo | openssl s_client -connect "$SVC:993" -servername "$HOST" -brief >/dev/null 2>&1 \
             && echo "    ok" || fail "no TLS on 993"
           {{- end }}
+          {{- if .Values.ports.pop3s }}
+
+          echo "==> POP3S (995) speaks implicit TLS and greets"
+          greet=$(printf 'QUIT\r\n' | timeout 15 openssl s_client -connect "$SVC:995" -servername "$HOST" -quiet 2>/dev/null | head -1)
+          case "$greet" in
+            "+OK"*) echo "    ok ($greet)" ;;
+            *) fail "got '$greet'" ;;
+          esac
+          {{- end }}
 
           {{- if .Values.webmail.enabled }}
           echo "==> webmail serves the Roundcube login page"
