@@ -1,0 +1,68 @@
+{{- if .Values.networkPolicy.enabled }}
+{{/*
+Gitea: admits the web port (and SSH) only, optionally only from the
+peers you list. Egress is left open: mirrors, migrations, webhooks and
+mail all go to destinations the chart cannot know.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "gitea.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.componentLabels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "server") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with .Values.networkPolicy.http.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- if .Values.ssh.enabled }}
+    - ports:
+        - port: ssh
+          protocol: TCP
+      {{- with .Values.networkPolicy.ssh.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+{{- if .Values.postgresql.enabled }}
+---
+{{/*
+PostgreSQL: reachable from the Gitea pod and nothing else, so the
+database holding the audit log cannot be reached around Gitea.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "gitea.postgresql.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.componentLabels" (dict "root" . "component" "postgresql") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "postgresql") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "server") | nindent 14 }}
+      ports:
+        - port: postgresql
+          protocol: TCP
+  # The database needs no network access of its own.
+  egress: []
+{{- end }}
+{{- end }}

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gitea.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+data:
+  # No secrets in here: they arrive as GITEA__* environment variables.
+  # The init container copies this to a writable emptyDir, where the
+  # image's entrypoint applies them.
+  app.ini: |
+    {{- include "gitea.appIni" . | trim | nindent 4 }}

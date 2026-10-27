@@ -1,0 +1,194 @@
+{{- $fullName := include "gitea.fullname" . -}}
+{{- $image := include "gitea.image" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.componentLabels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  serviceName: {{ $fullName }}
+  # Queues and search indexes live on the local volume, so Gitea runs as
+  # exactly one replica.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "server") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "server") | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "gitea.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- include "gitea.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # app.ini must be writable: the entrypoint applies the GITEA__*
+        # secret variables to it on every start.
+        - name: config
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c", "cp /config-src/app.ini /etc/gitea/app.ini && chmod 0600 /etc/gitea/app.ini"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config-src
+              mountPath: /config-src
+              readOnly: true
+            - name: config
+              mountPath: /etc/gitea
+        # Runs through the image's entrypoint so the secrets are applied
+        # first, then migrates the schema and creates the first admin.
+        - name: setup
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              echo "==> waiting for the database"
+              i=0
+              until gitea --config "$GITEA_APP_INI" migrate; do
+                i=$((i + 1))
+                if [ "$i" -ge 30 ]; then
+                  echo "database still unreachable after $i attempts"
+                  exit 1
+                fi
+                sleep 5
+              done
+              {{- if .Values.admin.create }}
+              echo "==> first admin"
+              if gitea --config "$GITEA_APP_INI" admin user list --admin | awk 'NR > 1 { print $2 }' | grep -qx "$ADMIN_USERNAME"; then
+                echo "    $ADMIN_USERNAME exists, leaving it alone"
+              else
+                gitea --config "$GITEA_APP_INI" admin user create --admin \
+                  --username "$ADMIN_USERNAME" \
+                  --email "$ADMIN_EMAIL" \
+                  --password "$ADMIN_PASSWORD" \
+                  --must-change-password=false
+                echo "    created $ADMIN_USERNAME"
+              fi
+              {{- end }}
+          env:
+            {{- include "gitea.env" . | nindent 12 }}
+            {{- if .Values.admin.create }}
+            - name: ADMIN_USERNAME
+              value: {{ .Values.admin.username | quote }}
+            - name: ADMIN_EMAIL
+              value: {{ include "gitea.adminEmail" . | quote }}
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gitea.secretName" . }}
+                  key: adminPassword
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- include "gitea.volumeMounts" . | nindent 12 }}
+      containers:
+        - name: gitea
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            {{- if .Values.ssh.enabled }}
+            - name: ssh
+              containerPort: 2222
+              protocol: TCP
+            {{- end }}
+          env:
+            {{- include "gitea.env" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- include "gitea.volumeMounts" . | nindent 12 }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config-src
+          configMap:
+            name: {{ $fullName }}-config
+        - name: config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        # Selector labels only. volumeClaimTemplates are immutable, so a
+        # version-bearing label like helm.sh/chart would make every chart
+        # version bump an un-upgradable StatefulSet.
+        labels:
+          {{- include "gitea.componentSelectorLabels" (dict "root" . "component" "server") | nindent 10 }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}

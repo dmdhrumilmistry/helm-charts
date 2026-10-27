@@ -20,6 +20,7 @@ helm search repo dmdhrumilmistry
 | [vaanarsena](vaanarsena/) | 0.7.0 | 0.6.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
 | [vishwakarma](vishwakarma/) | 0.4.7 | 0.4.6 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
 | [mailserver](mailserver/) | 0.1.0 | 16.0.1 | Self-hosted mail on IPv6 and dual-stack clusters with [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver): Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM, MTA-STS and the DNS records generated for your domain |
+| [gitea](gitea/) | 0.1.0 | 28.2.0 | Self-hosted [Gitea](https://about.gitea.com) Git forge with audit logging, enforced 2FA, sign-in required and private-by-default repositories, on a hardened rootless pod with a bundled PostgreSQL |
 
 ### netbird
 
@@ -184,6 +185,26 @@ install and preserved on upgrade. See the
 > ICMPv6 open. Gmail and Microsoft reject IPv6 senders without a
 > matching PTR record.
 
+### gitea
+
+One value to install:
+
+```bash
+helm install git dmdhrumilmistry/gitea \
+  --namespace gitea --create-namespace \
+  --set domain=git.example.com
+```
+
+Chosen over GitLab CE, Forgejo and OneDev because Gitea 28 is the only
+one with a full audit log in its free build, and it is a single binary
+to keep running. Audit logging, enforced 2FA, closed registration and
+sign-in-to-view are all on by default; every secret and the first admin
+are generated and preserved on upgrade. The comparison and full
+documentation are in the [chart README](gitea/README.md).
+
+> Back up the `<release>-gitea-secrets` Secret with the volumes: without
+> `secretKey`, every stored 2FA secret is unreadable.
+
 ## Repository layout
 
 ```
@@ -203,7 +224,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma, mailserver
+CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma, mailserver, gitea
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \

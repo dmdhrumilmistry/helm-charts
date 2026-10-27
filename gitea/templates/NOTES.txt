@@ -1,0 +1,43 @@
+{{- $fullName := include "gitea.fullname" . -}}
+Gitea {{ .Chart.AppVersion }} is starting at {{ include "gitea.rootUrl" . }}
+
+1. Wait for it:
+
+     kubectl -n {{ .Release.Namespace }} rollout status statefulset/{{ $fullName }}
+
+{{- if .Values.admin.create }}
+
+2. Sign in as {{ .Values.admin.username }}. The password:
+
+     kubectl -n {{ .Release.Namespace }} get secret {{ include "gitea.secretName" . }} \
+       -o jsonpath='{.data.adminPassword}' | base64 -d; echo
+{{- if eq .Values.security.twoFactorAuth "enforced" }}
+
+   2FA is enforced: you will be asked to enrol an authenticator app or a
+   passkey before anything else. Store the recovery code it shows you.
+{{- end }}
+{{- end }}
+{{- if not .Values.ingress.enabled }}
+
+   No ingress. To try it from your machine:
+
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} 3000:{{ .Values.service.port }}
+{{- end }}
+
+3. Audit log: {{ if .Values.audit.enabled }}ON, kept {{ if eq (int .Values.audit.retentionDays) 0 }}forever{{ else }}{{ .Values.audit.retentionDays }} days{{ end }}. Site Administration -> Audit Log.{{ else }}OFF. Set audit.enabled=true to record security events.{{ end }}
+{{- if .Values.log.accessLog }}
+   Access log on stdout:  kubectl -n {{ .Release.Namespace }} logs statefulset/{{ $fullName }} -c gitea
+{{- end }}
+{{- if .Values.ssh.enabled }}
+
+4. Git over SSH: git@{{ include "gitea.domain" . }}:{{ .Values.ssh.service.port }} via Service {{ $fullName }}-ssh ({{ .Values.ssh.service.type }}).
+{{- if eq .Values.ssh.service.type "ClusterIP" }}
+   It is ClusterIP, so only reachable in-cluster. Set ssh.service.type=LoadBalancer to publish it.
+{{- end }}
+{{- end }}
+
+Back up the {{ include "gitea.secretName" . }} Secret together with the volumes:
+without secretKey, every stored 2FA secret is unreadable. It is kept on
+`helm uninstall`, and so are the PersistentVolumeClaims.
+
+Check the install:  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
