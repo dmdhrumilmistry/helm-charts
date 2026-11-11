@@ -1,0 +1,64 @@
+{{- if .Values.tests.enabled }}
+{{- $svc := printf "http://%s:%v" (include "gitea.fullname" .) .Values.service.port -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "gitea.fullname" . }}-test-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: {{ include "gitea.imageRef" (dict "root" . "image" .Values.tests.image "defaultTag" .Values.tests.image.tag) }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          set -u
+          SVC={{ $svc }}
+          fail() { echo "    FAILED: $*"; exit 1; }
+
+          echo "==> health check passes"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$SVC/api/healthz")
+          [ "$code" = 200 ] && echo "    ok" || fail "got HTTP $code"
+
+          {{- if .Values.security.requireSigninView }}
+
+          echo "==> anonymous visitors are sent to the login page"
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' -m 10 "$SVC/explore/repos")
+          case "$loc" in
+            */user/login*) echo "    ok ($loc)" ;;
+            *) fail "expected a redirect to /user/login, got '$loc'" ;;
+          esac
+          {{- end }}
+
+          {{- if .Values.metrics.enabled }}
+
+          echo "==> /metrics refuses requests without the token"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$SVC/metrics")
+          [ "$code" = 401 ] || [ "$code" = 403 ] && echo "    ok (HTTP $code)" || fail "got HTTP $code"
+          {{- end }}
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+{{- end }}

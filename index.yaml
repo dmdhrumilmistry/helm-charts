@@ -85,6 +85,58 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/falco/falco-0.1.0.tgz
     version: 0.1.0
+  gitea:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. One required value (domain); every secret and the first admin account generated on install and preserved on upgrade.
+        - kind: added
+          description: Audit logging on by default (Gitea 28+), kept for a year, with access and SSH logs on stdout for a SIEM to collect.
+        - kind: added
+          description: Hardened defaults - 2FA enforced, registration and OpenID off, sign-in required to view anything, private repositories, password complexity, offline mode.
+        - kind: added
+          description: Rootless, read-only root filesystem, all capabilities dropped. NetworkPolicies keep PostgreSQL reachable only from Gitea.
+      artifacthub.io/images: |
+        - name: gitea
+          image: docker.gitea.com/gitea:28.2.0-rootless
+        - name: postgres
+          image: postgres:17-alpine
+      artifacthub.io/license: MIT
+      artifacthub.io/links: |
+        - name: Gitea source (MIT)
+          url: https://github.com/go-gitea/gitea
+        - name: Gitea 28.0.0 release notes (audit logging)
+          url: https://blog.gitea.com/release-of-28.0.0/
+    apiVersion: v2
+    appVersion: 28.2.0
+    created: "2026-11-11T11:35:23.701412111Z"
+    description: Self-hosted Git forge (Gitea) with audit logging, enforced 2FA, private-by-default
+      repositories and sign-in required, on a hardened rootless pod with a bundled
+      PostgreSQL.
+    digest: a59f24e52696c57025ae011fee1c6334e540541596191f98fc7a118311e5e162
+    home: https://about.gitea.com
+    icon: https://raw.githubusercontent.com/go-gitea/gitea/main/assets/logo.svg
+    keywords:
+    - git
+    - gitea
+    - forge
+    - scm
+    - code-review
+    - audit-log
+    - 2fa
+    - lfs
+    - packages
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: gitea
+    sources:
+    - https://github.com/go-gitea/gitea
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/gitea/gitea-0.1.0.tgz
+    version: 0.1.0
   mailserver:
   - annotations:
       artifacthub.io/changes: |
@@ -1455,4 +1507,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-11T10:00:28.345479086Z"
+generated: "2026-11-11T11:35:23.699353401Z"

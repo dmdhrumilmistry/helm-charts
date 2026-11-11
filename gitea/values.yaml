@@ -1,0 +1,367 @@
+# =====================================================================
+# gitea - a self-hosted Git forge with audit logging
+#
+#   helm install git dmdhrumilmistry/gitea \
+#     --namespace gitea --create-namespace \
+#     --set domain=git.example.com
+#
+# One required value: domain. The public URL, the SSH clone host, the
+# ingress host and the TLS certificate all derive from it.
+#
+# Every secret Gitea needs (SECRET_KEY, INTERNAL_TOKEN, both JWT
+# secrets, the metrics token, the database password and the first
+# admin's password) is generated on first install and read back from
+# the cluster on upgrade, so re-running helm never rotates them.
+#
+# LICENSING: this chart is MIT, and so is Gitea.
+# =====================================================================
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  clusterDomain: cluster.local
+
+image:
+  registry: docker.gitea.com
+  repository: gitea
+  # Defaults to <appVersion>-rootless. Keep the -rootless suffix: the
+  # chart's paths, user and SSH server assume the rootless image.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+commonLabels: {}
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+# =====================================================================
+# Identity
+# =====================================================================
+
+# REQUIRED. The hostname Gitea is reached at, e.g. git.example.com. No
+# default on purpose: set it with --set or in a values file you keep
+# out of version control.
+domain: ""
+
+# Public URL. Defaults to https://<domain>/. Session cookies are marked
+# Secure whenever this is https.
+rootUrl: ""
+
+# Shown in page titles and emails.
+appName: Gitea
+
+# =====================================================================
+# First admin account
+#
+# Created by the init container if no user with this name exists yet.
+# Leave password empty to generate one; read it back with the command
+# in the install notes. With 2FA enforced (the default) the admin is
+# asked to enrol an authenticator on first sign-in.
+#
+# Never deleted or reset by the chart: change the password in the UI
+# and the chart leaves it alone.
+# =====================================================================
+admin:
+  create: true
+  username: gitea-admin
+  # Defaults to <username>@<domain>.
+  email: ""
+  password: ""
+
+# =====================================================================
+# Secrets
+#
+# Leave empty to generate. Set them only when migrating an existing
+# instance: losing secretKey makes every stored 2FA secret and
+# encrypted credential unreadable.
+# =====================================================================
+secrets:
+  secretKey: ""
+  internalToken: ""
+  # Both JWT secrets must be 43 characters of base64url (32 bytes).
+  # `gitea generate secret JWT_SECRET` prints a valid one.
+  jwtSecret: ""
+  lfsJwtSecret: ""
+  metricsToken: ""
+  adminPassword: ""
+  postgresPassword: ""
+
+# Bring your own Secret instead. It must hold every key listed under
+# `secrets` above (adminPassword only if admin.create; postgresPassword
+# only with the bundled database). The chart then generates nothing.
+existingSecret: ""
+
+# =====================================================================
+# Security policy
+#
+# Each of these lands in app.ini. The defaults are the locked-down
+# end of what Gitea offers; loosen deliberately.
+# =====================================================================
+security:
+  # "enforced" makes every user enrol TOTP or a passkey before they can
+  # do anything else. Set to "" to make 2FA optional.
+  twoFactorAuth: enforced
+  # Only admins create accounts. Set false for self-registration.
+  disableRegistration: true
+  # Anonymous visitors see nothing, not even public repositories, and
+  # the API refuses unauthenticated calls.
+  requireSigninView: true
+  # Classes every new password must contain: lower, upper, digit, spec.
+  passwordComplexity: lower,upper,digit
+  minPasswordLength: 12
+  # Checks new passwords against Have I Been Pwned using k-anonymity
+  # (only the first 5 characters of the SHA-1 leave the pod). Needs
+  # egress to api.pwnedpasswords.com.
+  passwordCheckPwn: false
+  # Days a "remember me" sign-in lasts before re-authentication.
+  loginRememberDays: 7
+  # New repositories are private unless the creator says otherwise.
+  defaultPrivateRepos: true
+  # Whether ordinary users may create organisations.
+  allowUserOrgCreation: false
+  # Proxies whose X-Forwarded-For Gitea believes. Audit events and the
+  # access log record the client address from it, so this decides
+  # whether they show the real client or the ingress controller.
+  # Defaults to the private ranges a cluster's pods live in; narrow it
+  # to your ingress controller's pod CIDR if you can, and keep
+  # networkPolicy.http.from restricted to the controller so nothing
+  # else can forge the header.
+  trustedProxies: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7
+
+# =====================================================================
+# Audit and logging
+# =====================================================================
+audit:
+  # Records security-relevant events (sign-ins, 2FA changes, tokens,
+  # keys, permission and membership changes, repository settings,
+  # deletions) in the database. Browse and filter them in Site
+  # Administration, or per organisation, repository and user; export
+  # as JSONL from the admin page. Needs Gitea 28.0.0 or later.
+  enabled: true
+  # 0 keeps events forever. Retention is enforced by Gitea's own
+  # cron.delete_old_audit_events task.
+  retentionDays: 365
+
+log:
+  level: Info
+  # One line per HTTP request on stdout: who, from where, what, status.
+  # Pair with the audit log for a SIEM; Wazuh or any log shipper that
+  # reads container logs picks it up.
+  accessLog: true
+  # Logs SSH connections and authentication failures.
+  sshLog: true
+
+# =====================================================================
+# Features
+# =====================================================================
+
+# Gitea Actions. Off by default: it is CI that runs code from pull
+# requests, it needs a separately deployed act_runner, and fork PR
+# approval was the subject of several CVEs fixed in 28.0.0. Turn it on
+# once you have decided where runners live.
+actions:
+  enabled: false
+
+lfs:
+  enabled: true
+
+packages:
+  # Container, npm, Maven, PyPI and other package registries.
+  enabled: true
+
+# Outgoing mail for notifications and password resets. Without it,
+# admins reset passwords for users.
+mailer:
+  enabled: false
+  # smtps, smtp+starttls, smtp, sendmail
+  protocol: smtps
+  host: ""
+  port: 465
+  from: ""
+  user: ""
+  # Put the password in a Secret you manage rather than in values.
+  existingSecret: ""
+  existingSecretKey: password
+
+# =====================================================================
+# Extra app.ini
+#
+# Merged over the chart's generated app.ini, section by section, so
+# you can set or override any key the chart does not model. The root
+# section is "". Secrets and database settings are applied after this
+# and cannot be overridden here.
+#
+#   config:
+#     server:
+#       LANDING_PAGE: explore
+#     repository:
+#       DISABLED_REPO_UNITS: repo.wiki
+#
+# Reference: https://docs.gitea.com/administration/config-cheat-sheet
+# =====================================================================
+config: {}
+
+# =====================================================================
+# Workload
+# =====================================================================
+
+# Gitea keeps queues and search indexes on its own volume, so it runs
+# as a single replica. That is what keeps maintenance down: no Redis,
+# no shared storage, no Elasticsearch.
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+extraEnv: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# =====================================================================
+# Networking
+# =====================================================================
+service:
+  type: ClusterIP
+  # Service port. Gitea itself always listens on 3000.
+  port: 3000
+  annotations: {}
+
+ssh:
+  enabled: true
+  service:
+    # LoadBalancer to clone over SSH from outside the cluster. HTTP
+    # ingresses cannot carry SSH.
+    type: ClusterIP
+    # The port users put in clone URLs. The container listens on 2222.
+    port: 22
+    annotations: {}
+    externalTrafficPolicy: ""
+    ipFamilyPolicy: ""
+    ipFamilies: []
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt
+    # nginx.ingress.kubernetes.io/proxy-body-size: 512m
+  tls:
+    enabled: true
+    # Defaults to <fullname>-tls. cert-manager fills it when you set an
+    # issuer annotation above.
+    secretName: ""
+
+networkPolicy:
+  enabled: true
+  http:
+    # Peers allowed to reach the web port. Empty allows any. Restrict
+    # to your ingress controller, e.g.
+    #   - namespaceSelector:
+    #       matchLabels:
+    #         kubernetes.io/metadata.name: ingress-nginx
+    from: []
+  ssh:
+    # Peers allowed to reach SSH. Empty allows any.
+    from: []
+
+# Prometheus metrics on /metrics, protected by the generated metrics
+# token.
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 60s
+    labels: {}
+
+# =====================================================================
+# Database
+#
+# The bundled PostgreSQL is a single pod with its own volume - fine for
+# a team, and the only database this chart's NetworkPolicy fences off
+# completely. Point externalDatabase at a managed instance for
+# point-in-time recovery.
+# =====================================================================
+postgresql:
+  enabled: true
+  image:
+    registry: ""
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: gitea
+    database: gitea
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    annotations: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+externalDatabase:
+  host: ""
+  port: 5432
+  database: gitea
+  username: gitea
+  # Or existingSecret with key postgresPassword.
+  password: ""
+  # disable, require, verify-ca, verify-full
+  sslMode: require
+
+# =====================================================================
+# helm test
+# =====================================================================
+tests:
+  enabled: true
+  image:
+    registry: ""
+    repository: curlimages/curl
+    tag: "8.11.1"

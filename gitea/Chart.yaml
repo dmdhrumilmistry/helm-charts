@@ -1,0 +1,57 @@
+apiVersion: v2
+name: gitea
+description: Self-hosted Git forge (Gitea) with audit logging, enforced 2FA, private-by-default repositories and sign-in required, on a hardened rootless pod with a bundled PostgreSQL.
+type: application
+
+# Chart version. Bump on every change to the chart or its templates.
+version: 0.1.0
+
+# Version of Gitea this chart deploys by default. 28.0.0 is the first
+# open source release with audit logging, so do not pin below it.
+appVersion: "28.2.0"
+
+icon: https://raw.githubusercontent.com/go-gitea/gitea/main/assets/logo.svg
+
+home: https://about.gitea.com
+sources:
+  - https://github.com/go-gitea/gitea
+  - https://github.com/dmdhrumilmistry/helm-charts
+
+keywords:
+  - git
+  - gitea
+  - forge
+  - scm
+  - code-review
+  - audit-log
+  - 2fa
+  - lfs
+  - packages
+
+maintainers:
+  - name: Dhrumil Mistry
+    url: https://github.com/dmdhrumilmistry
+
+annotations:
+  # This chart is MIT, and so is Gitea. The chart contains no Gitea code
+  # and references the published rootless image.
+  artifacthub.io/license: MIT
+  artifacthub.io/images: |
+    - name: gitea
+      image: docker.gitea.com/gitea:28.2.0-rootless
+    - name: postgres
+      image: postgres:17-alpine
+  artifacthub.io/links: |
+    - name: Gitea source (MIT)
+      url: https://github.com/go-gitea/gitea
+    - name: Gitea 28.0.0 release notes (audit logging)
+      url: https://blog.gitea.com/release-of-28.0.0/
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release. One required value (domain); every secret and the first admin account generated on install and preserved on upgrade.
+    - kind: added
+      description: Audit logging on by default (Gitea 28+), kept for a year, with access and SSH logs on stdout for a SIEM to collect.
+    - kind: added
+      description: Hardened defaults - 2FA enforced, registration and OpenID off, sign-in required to view anything, private repositories, password complexity, offline mode.
+    - kind: added
+      description: Rootless, read-only root filesystem, all capabilities dropped. NetworkPolicies keep PostgreSQL reachable only from Gitea.
