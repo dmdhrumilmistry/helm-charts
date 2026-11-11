@@ -1,0 +1,369 @@
+# Default values for nandi.
+#
+# nandi is a gateway and runtime monitor for AI agents. One pod runs the
+# proxy that agents send LLM, MCP and A2A traffic through, and the admin
+# API that serves the dashboard and the operator endpoints (approvals, kill
+# switch, tool pins, audit). Documentation:
+# https://dmdhrumilmistry.github.io/nandi/docs/
+
+image:
+  repository: docker.io/dmdhrumilmistry/nandi
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+
+# ---------------------------------------------------------------------------
+# nandi.yaml
+# ---------------------------------------------------------------------------
+# Passed through to nandi as its configuration file. Every key nandi
+# supports can go here; see
+# https://dmdhrumilmistry.github.io/nandi/docs/reference/configuration.html
+# Unknown keys stop nandi at startup, which catches typos.
+#
+# The chart sets these itself and ignores what you put here:
+#   listen.proxy, admin.listen, admin.token, admin.ui, data_dir,
+#   policy.rules, policy.cedar (they point at the files under `policies`)
+config:
+  # monitor records what enforcement would do without blocking anything.
+  # Switch to enforce once `nandi replay` shows no surprises.
+  mode: monitor
+  fail_mode: closed
+
+  # Path prefixes on the proxy mapped to upstreams. Agents in the cluster use
+  # http://<release>-proxy.<namespace>:8787/<prefix> as their base URL.
+  routes:
+    - name: openai
+      prefix: /openai
+      upstream: https://api.openai.com
+      kind: llm
+    - name: anthropic
+      prefix: /anthropic
+      upstream: https://api.anthropic.com
+      kind: llm
+    # Keep provider keys out of agents: put them in `secretEnv` and inject
+    # them on the route.
+    # - name: openai
+    #   prefix: /openai
+    #   upstream: https://api.openai.com
+    #   kind: llm
+    #   inject_headers: { authorization: "env:OPENAI_AUTHORIZATION" }
+    #   strip_headers: [authorization]
+    # - name: github
+    #   prefix: /mcp/github
+    #   upstream: https://api.githubcopilot.com/mcp
+    #   kind: mcp
+
+  identity:
+    allow_anonymous: true
+    api_key_header: x-nandi-key
+    # api_keys:
+    #   - { agent: billing-agent, sha256: <nandi key hash>, groups: [finance] }
+
+  policy:
+    default: allow
+
+  approvals:
+    timeout_secs: 300
+    on_timeout: deny
+
+  audit:
+    enabled: true
+    retention_days: 30
+
+  telemetry:
+    log_format: json
+    prometheus: true
+
+# ---------------------------------------------------------------------------
+# Policies
+# ---------------------------------------------------------------------------
+# Mounted under /etc/nandi/policies and wired into the config. The defaults
+# are the example policies `nandi init` writes. Set either to "" to drop it.
+policies:
+  rules: |
+    # YAML rules: argument predicates and temporal sequences.
+    #
+    # Actions, least to most restrictive: allow | alert | redact | ask | deny.
+    # `ask` holds the call until an operator approves it (dashboard,
+    # `nandi approvals approve <id>`) or the approval times out.
+    #
+    # `tool` may be `tool` or `server/tool`; both parts accept `*` and `?` globs.
+    # Argument matchers use dotted paths and operators such as eq, in, glob,
+    # regex, prefix, contains, gt, gte, lt, lte, max_len and exists.
+
+    rules:
+      - id: no-rm-rf
+        description: Recursive forced delete from a shell command
+        match:
+          tool: "*"
+          args:
+            command: { regex: "\\brm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|-r\\s+-f|-f\\s+-r)\\b" }
+        action: deny
+        severity: critical
+
+      - id: no-pipe-to-shell
+        description: Downloading a script and piping it into a shell
+        match:
+          tool: "*"
+          args:
+            command: { regex: "(curl|wget)[^|]*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b" }
+        action: ask
+        severity: high
+
+      - id: large-payment
+        description: Payments above 1000 need a human
+        match:
+          tool: "*pay*"
+          args:
+            amount: { gt: 1000 }
+        action: ask
+        severity: high
+
+      - id: tainted-session-sends-email
+        description: Email sent by a session that read untrusted content
+        match:
+          tool: "*send_email*"
+          session: { tainted: true }
+        action: ask
+        severity: high
+
+    sequences:
+      - id: refund-needs-verification
+        description: A refund must follow a successful identity check of the same user
+        tool: "*refund*"
+        requires_prior:
+          tool: "*verify_identity*"
+          success: true
+          same_args: [user_id]
+          within_calls: 50
+        action: deny
+        severity: high
+  cedar: |
+    // Cedar policies, evaluated on every action next to the YAML rules.
+    //
+    // Entities nandi provides per request:
+    //   principal  Agent::"<agent id>", member of Group::"<group>" for each group
+    //   action     Action::"call_tool" | "list_tools" | "llm_request" | "a2a_send"
+    //   resource   Tool::"<server>/<tool>" (in Server::"<server>"),
+    //              Model::"<provider>/<model>", Peer::"<peer>"
+    //   context    { args, session: { tainted, risk (0-100), calls }, method? }
+    //
+    // Annotations: @id names the rule (reported as cedar.<id>), @message and
+    // @severity describe it, and @action("ask" | "alert" | "redact") on a forbid
+    // downgrades it from deny.
+    //
+    // With `policy.default: deny`, a tool call runs only if some permit (or YAML
+    // allow rule) matches it.
+
+    // Interns may never delete repositories.
+    @id("interns-no-repo-delete")
+    @message("interns may not delete repositories")
+    @severity("high")
+    forbid (
+      principal in Group::"interns",
+      action == Action::"call_tool",
+      resource == Tool::"github/delete_repository"
+    );
+
+    // Merging a pull request needs a human in the loop.
+    @id("merge-needs-approval")
+    @action("ask")
+    forbid (
+      principal,
+      action == Action::"call_tool",
+      resource == Tool::"github/merge_pull_request"
+    );
+
+    // The support group may use every tool of the CRM server.
+    @id("support-uses-crm")
+    permit (
+      principal in Group::"support",
+      action == Action::"call_tool",
+      resource in Server::"crm"
+    );
+
+    // Anyone may read files under /tmp through the filesystem server.
+    @id("read-tmp")
+    permit (
+      principal,
+      action == Action::"call_tool",
+      resource == Tool::"filesystem/read_file"
+    )
+    when { context.args has path && context.args.path like "/tmp/*" };
+  # More files under /etc/nandi/policies. *.yaml / *.yml become rule files,
+  # *.cedar Cedar files; anything else (a Cedar entities JSON) is only
+  # mounted, for you to reference from `config`.
+  extraFiles: {}
+
+# ---------------------------------------------------------------------------
+# Admin API and dashboard
+# ---------------------------------------------------------------------------
+admin:
+  # Bearer token for the admin API and the dashboard. Left empty, the chart
+  # generates one on install and keeps it on upgrade. Read it with:
+  #   kubectl get secret <release>-admin -o jsonpath='{.data.token}' | base64 -d
+  token: ""
+  # Use a Secret you manage instead.
+  existingSecret: ""
+  existingSecretKey: token
+  # Serve the dashboard at / on the admin port.
+  ui: true
+
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+# Environment variables stored in a Secret the chart creates, for the
+# `env:NAME` references in `config` (route credentials, JWT secrets).
+#   secretEnv:
+#     OPENAI_AUTHORIZATION: "Bearer sk-..."
+secretEnv: {}
+# Existing Secrets loaded whole as environment variables.
+existingSecretEnv: []
+extraEnv: []
+
+# Log filter (error, warn, info, debug, trace).
+logLevel: info
+# Async worker threads. nandi needs little CPU; two is plenty for most
+# deployments.
+workerThreads: 2
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+# The audit log, its signing key, tool pins, behaviour models and budgets
+# live in /var/lib/nandi. Without persistence they are lost on restart,
+# including the audit signing key.
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  # Use an existing PersistentVolumeClaim.
+  existingClaim: ""
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+containerPorts:
+  proxy: 8787
+  admin: 8788
+
+service:
+  # Agent traffic: LLM SDKs, MCP clients, A2A.
+  proxy:
+    type: ClusterIP
+    port: 8787
+    annotations: {}
+  # Operators: dashboard, admin API, /metrics, /healthz.
+  admin:
+    type: ClusterIP
+    port: 8788
+    annotations: {}
+
+ingress:
+  # The dashboard and admin API. Protect it like any operator console; the
+  # admin token is required for everything except the dashboard page itself.
+  admin:
+    enabled: false
+    className: ""
+    host: nandi.example.com
+    path: /
+    annotations:
+      # The live event view is a long-lived server-sent event stream.
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    tls: []
+    #  - secretName: nandi-admin-tls
+    #    hosts: [nandi.example.com]
+  # The proxy, for agents outside the cluster. Prefer in-cluster access or
+  # mTLS (config.listen.tls with client_ca) for production agents.
+  proxy:
+    enabled: false
+    className: ""
+    host: agents.nandi.example.com
+    path: /
+    annotations:
+      # Streaming LLM responses and held approvals keep requests open.
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    tls: []
+
+networkPolicy:
+  # Ingress rules only. Egress stays open: upstream LLM APIs, MCP servers and
+  # webhooks are destinations the chart cannot know.
+  enabled: true
+  proxy:
+    # Peers allowed to reach the proxy. Empty allows any pod; restrict it
+    # to the namespaces your agents run in, for example:
+    #   - namespaceSelector:
+    #       matchLabels: { kubernetes.io/metadata.name: agents }
+    from: []
+  admin:
+    # Peers allowed to reach the admin API. The default admits the ingress
+    # controller namespace and Prometheus in the monitoring namespace.
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+
+serviceMonitor:
+  # Requires the Prometheus Operator CRDs.
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# ---------------------------------------------------------------------------
+# Pod
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Idle memory is about 20 MB; the limit leaves room for busy sessions and
+# large payloads. Raise it substantially if you enable the ML classifier.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+
+# Extra volumes, for example TLS certificates referenced from config.listen.tls.
+extraVolumes: []
+extraVolumeMounts: []

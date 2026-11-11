@@ -1,0 +1,191 @@
+{{/*
+One replica on purpose: sessions, held approvals and the audit log live in
+the nandi process, and its database is single-writer. Run one release per
+team or environment to scale out.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "nandi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "nandi.headlessServiceName" . }}
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "nandi.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nandi.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Roll the pod when the configuration or policies change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.secretEnv }}
+        checksum/env: {{ toJson .Values.secretEnv | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "nandi.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: nandi
+          image: {{ include "nandi.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run", "-c", "/etc/nandi/nandi.yaml"]
+          env:
+            - name: NANDI_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nandi.adminSecretName" . }}
+                  key: {{ include "nandi.adminSecretKey" . }}
+            - name: NANDI_LOG
+              value: {{ .Values.logLevel | quote }}
+            - name: NANDI_WORKER_THREADS
+              value: {{ .Values.workerThreads | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.secretEnv .Values.existingSecretEnv }}
+          envFrom:
+            {{- if .Values.secretEnv }}
+            - secretRef:
+                name: {{ include "nandi.envSecretName" . }}
+            {{- end }}
+            {{- range .Values.existingSecretEnv }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: proxy
+              containerPort: {{ .Values.containerPorts.proxy }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.containerPorts.admin }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nandi/nandi.yaml
+              subPath: nandi.yaml
+              readOnly: true
+            - name: policies
+              mountPath: /etc/nandi/policies
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/nandi
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "nandi.fullname" . }}
+            items:
+              - key: nandi.yaml
+                path: nandi.yaml
+        - name: policies
+          configMap:
+            name: {{ include "nandi.fullname" . }}
+            items:
+              {{- if .Values.policies.rules }}
+              - key: rules.yaml
+                path: rules.yaml
+              {{- end }}
+              {{- if .Values.policies.cedar }}
+              - key: policy.cedar
+                path: policy.cedar
+              {{- end }}
+              {{- range $name, $_ := .Values.policies.extraFiles }}
+              - key: {{ $name }}
+                path: {{ $name }}
+              {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+        {{- else if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "nandi.selectorLabels" . | nindent 10 }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}

@@ -1,0 +1,41 @@
+nandi {{ .Chart.AppVersion }} is running in {{ .Values.config.mode | default "monitor" }} mode.
+{{- if eq (.Values.config.mode | default "monitor") "monitor" }}
+Every decision is recorded but nothing is blocked yet. Switch to enforce with
+--set config.mode=enforce once the dashboard shows what you expect.
+{{- end }}
+
+1. Admin token (for the dashboard, the admin API and the CLI):
+
+   kubectl -n {{ .Release.Namespace }} get secret {{ include "nandi.adminSecretName" . }} \
+     -o jsonpath='{.data.{{ include "nandi.adminSecretKey" . }}}' | base64 -d; echo
+
+2. Dashboard:
+{{- if .Values.ingress.admin.enabled }}
+
+   http{{ if .Values.ingress.admin.tls }}s{{ end }}://{{ .Values.ingress.admin.host }}/
+{{- else }}
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "nandi.adminServiceName" . }} 8788:{{ .Values.service.admin.port }}
+   open http://127.0.0.1:8788/  (Token, top right)
+{{- end }}
+
+3. Point agents at the proxy. In the cluster:
+{{- range .Values.config.routes }}
+
+   {{ .name }} ({{ .kind }}): http://{{ include "nandi.proxyServiceName" $ }}.{{ $.Release.Namespace }}:{{ $.Values.service.proxy.port }}{{ .prefix }}
+{{- end }}
+
+   For example OPENAI_BASE_URL=http://{{ include "nandi.proxyServiceName" . }}.{{ .Release.Namespace }}:{{ .Values.service.proxy.port }}/openai/v1
+
+4. From your machine, with the CLI:
+
+   export NANDI_ADMIN_TOKEN=<token from step 1>
+   nandi status --admin http://127.0.0.1:8788    # with the port-forward above
+   nandi tail --admin http://127.0.0.1:8788 --min-verdict alert
+
+Documentation: https://dmdhrumilmistry.github.io/nandi/docs/
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. The audit log and its signing key are lost
+when the pod restarts.
+{{- end }}

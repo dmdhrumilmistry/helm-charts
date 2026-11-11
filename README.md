@@ -20,6 +20,7 @@ helm search repo dmdhrumilmistry
 | [vaanarsena](vaanarsena/) | 0.7.0 | 0.6.0 | Self-hosted [VaanarSena](https://github.com/dmdhrumilmistry/VaanarSena): open source MDM for iOS, macOS, Windows, Android, ChromeOS and Linux, with BYOD, smart groups, blueprints and GitOps manifests |
 | [vishwakarma](vishwakarma/) | 0.4.7 | 0.4.6 | Self-hosted [Vishwakarma](https://github.com/dmdhrumilmistry/vishwakarma): throwaway containers, Android, Linux VMs (KubeVirt) and macOS (Tart on Mac hosts) for testing apps and endpoint tools, with a browser terminal, automatic expiry and per-sandbox network isolation |
 | [mailserver](mailserver/) | 0.1.0 | 16.0.1 | Self-hosted mail on IPv6 and dual-stack clusters with [docker-mailserver](https://github.com/docker-mailserver/docker-mailserver): Postfix, Dovecot, Rspamd, Fail2ban and Roundcube webmail, with DKIM, MTA-STS and the DNS records generated for your domain |
+| [nandi](nandi/) | 0.1.0 | 0.1.0 | [nandi](https://github.com/dmdhrumilmistry/nandi): a gateway and runtime monitor for AI agents. Records every LLM, MCP and A2A call in a signed audit log, applies policy before it runs, holds risky actions for approval, and serves the operator dashboard and admin API |
 
 ### netbird
 
@@ -184,6 +185,23 @@ install and preserved on upgrade. See the
 > ICMPv6 open. Gmail and Microsoft reject IPv6 senders without a
 > matching PTR record.
 
+### nandi
+
+No required values:
+
+```bash
+helm install nandi dmdhrumilmistry/nandi \
+  --namespace nandi --create-namespace
+```
+
+One pod runs the proxy agents send LLM, MCP and A2A traffic through
+(`nandi-proxy:8787`) and the dashboard and admin API operators use
+(`nandi-admin:8788`), with the audit log on a persistent volume. The admin
+token is generated on install and kept on upgrade. nandi starts in monitor
+mode: decisions are recorded but nothing is blocked until you set
+`config.mode=enforce`. Routes, identities and policies are configured from
+values; see the [chart README](nandi/README.md).
+
 ## Repository layout
 
 ```
@@ -203,7 +221,7 @@ artifacthub-repo.yml     # Artifact Hub ownership metadata
 ## Releasing a chart
 
 ```bash
-CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma, mailserver
+CHART=netbird            # or teleport, wazuh, falco, adguard-home, vaanarsena, vishwakarma, mailserver, nandi
 helm lint "$CHART"
 helm package "$CHART" -d "$CHART"
 helm repo index "$CHART" \

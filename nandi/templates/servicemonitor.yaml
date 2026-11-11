@@ -1,0 +1,30 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "nandi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nandi.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: admin
+  namespaceSelector:
+    matchNames: [{{ .Release.Namespace }}]
+  endpoints:
+    - port: admin
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      # /metrics requires the admin token like the rest of the admin API.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ include "nandi.adminSecretName" . }}
+          key: {{ include "nandi.adminSecretKey" . }}
+{{- end }}

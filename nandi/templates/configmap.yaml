@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nandi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+data:
+  nandi.yaml: |
+    {{- include "nandi.config" . | nindent 4 }}
+  {{- with .Values.policies.rules }}
+  rules.yaml: |
+    {{- . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.policies.cedar }}
+  policy.cedar: |
+    {{- . | nindent 4 }}
+  {{- end }}
+  {{- range $name, $content := .Values.policies.extraFiles }}
+  {{ $name }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}

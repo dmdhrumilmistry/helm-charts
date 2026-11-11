@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nandi.proxyServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+  {{- with .Values.service.proxy.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.proxy.type }}
+  selector:
+    {{- include "nandi.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: {{ .Values.service.proxy.port }}
+      targetPort: proxy
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nandi.adminServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+  {{- with .Values.service.admin.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.admin.type }}
+  selector:
+    {{- include "nandi.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: admin
+      port: {{ .Values.service.admin.port }}
+      targetPort: admin
+      protocol: TCP
+---
+# Governing Service for the StatefulSet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nandi.headlessServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nandi.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "nandi.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: proxy
+      port: {{ .Values.containerPorts.proxy }}
+      targetPort: proxy
