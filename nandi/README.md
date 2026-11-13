@@ -203,7 +203,7 @@ LLM tokens, approvals and evaluation latency. For traces, set
 
 | Key | Default | Description |
 |---|---|---|
-| `image.repository` | `docker.io/dmdhrumilmistry/nandi` | image (linux/amd64, linux/arm64) |
+| `image.repository` | `docker.io/dmdhrumilmistry/nandi` | image (linux/amd64, arm64, arm/v7, riscv64, ppc64le) |
 | `image.tag` | chart `appVersion` | image tag |
 | `config` | monitor mode, OpenAI and Anthropic routes | nandi configuration, passed through |
 | `policies.rules`, `policies.cedar` | example policies | rule and Cedar files |

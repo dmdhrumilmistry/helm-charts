@@ -4,10 +4,10 @@ description: Gateway and runtime monitor for AI agents. Records every LLM, MCP a
 type: application
 
 # Chart version. Bump on every change to the chart or its templates.
-version: 0.1.1
+version: 0.2.0
 
 # Version of nandi this chart deploys by default.
-appVersion: "0.1.0"
+appVersion: "0.2.0"
 
 icon: https://raw.githubusercontent.com/dmdhrumilmistry/nandi/main/website/assets/mark.svg
 

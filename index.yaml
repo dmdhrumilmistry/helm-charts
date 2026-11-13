@@ -216,6 +216,56 @@ entries:
         - name: nandi source (Apache-2.0)
           url: https://github.com/dmdhrumilmistry/nandi
     apiVersion: v2
+    appVersion: 0.2.0
+    created: "2026-11-13T11:07:57.502706187Z"
+    description: Gateway and runtime monitor for AI agents. Records every LLM, MCP
+      and A2A call, applies policy before it runs, holds risky actions for approval,
+      and serves the operator dashboard and admin API.
+    digest: b36c605d84b68bc04bbbe64ecffceed4e118a9070550a1f04f32c24e81a641fd
+    home: https://dmdhrumilmistry.github.io/nandi/
+    icon: https://raw.githubusercontent.com/dmdhrumilmistry/nandi/main/website/assets/mark.svg
+    keywords:
+    - ai-agents
+    - llm
+    - mcp
+    - a2a
+    - security
+    - zero-trust
+    - policy
+    - prompt-injection
+    - audit-log
+    - gateway
+    maintainers:
+    - name: Dhrumil Mistry
+      url: https://github.com/dmdhrumilmistry
+    name: nandi
+    sources:
+    - https://github.com/dmdhrumilmistry/nandi
+    - https://github.com/dmdhrumilmistry/helm-charts
+    type: application
+    urls:
+    - https://dmdhrumilmistry.github.io/helm-charts/nandi/nandi-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Initial release. No required values; the admin token is generated on install and preserved on upgrade.
+        - kind: added
+          description: Separate Services for agent traffic (proxy) and operators (dashboard and admin API), each with an optional Ingress tuned for streaming.
+        - kind: added
+          description: nandi.yaml and policies from values, with the listen addresses, data directory and admin token set by the chart. Pods roll when they change.
+        - kind: added
+          description: Audit log and learned state on a persistent volume; rootless, read-only root filesystem, all capabilities dropped; NetworkPolicy and ServiceMonitor.
+      artifacthub.io/images: |
+        - name: nandi
+          image: docker.io/dmdhrumilmistry/nandi:0.1.0
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://dmdhrumilmistry.github.io/nandi/docs/
+        - name: nandi source (Apache-2.0)
+          url: https://github.com/dmdhrumilmistry/nandi
+    apiVersion: v2
     appVersion: 0.1.0
     created: "2026-11-13T09:12:40.871700653Z"
     description: Gateway and runtime monitor for AI agents. Records every LLM, MCP
@@ -1557,4 +1607,4 @@ entries:
     urls:
     - https://dmdhrumilmistry.github.io/helm-charts/wazuh/wazuh-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-13T09:12:40.867568522Z"
+generated: "2026-11-13T11:07:57.500860043Z"
