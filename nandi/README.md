@@ -121,6 +121,31 @@ changes. Test policies before deploying with `nandi policy test` and
 `nandi replay`; see
 [testing policy](https://dmdhrumilmistry.github.io/nandi/docs/policy/testing.html).
 
+nandi ships ready-made [policy packs](https://dmdhrumilmistry.github.io/nandi/docs/policy/packs.html)
+(coding agents, payments, production access, sensitive SaaS, outbound
+messages after untrusted input). Save one and pass it as an extra file:
+
+```sh
+nandi policy pack payments > payments.yaml
+helm upgrade nandi dmdhrumilmistry/nandi --reuse-values \
+  --set-file 'policies.extraFiles.payments\.yaml=payments.yaml'
+```
+
+### MCP server gate
+
+The `servers` section of `config` decides what happens to MCP servers that
+are not on an approved list, run unpinned packages or change their binary.
+See [capabilities and server risk](https://dmdhrumilmistry.github.io/nandi/docs/policy/capabilities.html).
+
+```yaml
+config:
+  servers:
+    on_unknown: deny        # quarantine servers not listed below
+    approved:
+      - { name: github, url: "https://api.githubcopilot.com/mcp" }
+      - { name: crm, url: "http://crm-mcp.tools.svc:8080/mcp" }
+```
+
 ## Exposing it
 
 | Ingress | For | Notes |
